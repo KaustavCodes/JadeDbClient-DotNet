@@ -23,7 +23,7 @@ public class HomeController : Controller
 
         // dbDataParameters.Add(_dbConfig.GetParameter("p_Name", "Jaded", DbType.String, ParameterDirection.Input, 250));
 
-        //var data = await _dbConfig.ExecuteStoredProcedureWithOutputAsync("add_date", dbDataParameters); 
+        // var data = await _dbConfig.ExecuteStoredProcedureWithOutputAsync("add_date", dbDataParameters); 
 
         // string insrtQry = "INSERT INTO tbl_test(Name) VALUES(@Name);";
 
@@ -35,8 +35,37 @@ public class HomeController : Controller
         string query = "SELECT * FROM tbl_test;";
 
         IEnumerable<DataModel> results = await _dbConfig.ExecuteQueryAsync<DataModel>(query);
+
+
+        //IEnumerable<DataModel> results = await _dbConfig.ExecuteStoredProcedureSelectDataAsync<DataModel>("get_data", new List<IDbDataParameter> { _dbConfig.GetParameter("p_limit", 1, DbType.Int32, ParameterDirection.Input, 250) });
         
         return View(results);
+    }
+
+
+    public async Task<IActionResult> MySqlDemo()
+    {
+        // List<IDbDataParameter> dbDataParameters = new List<IDbDataParameter>();
+
+        // dbDataParameters.Add(_dbConfig.GetParameter("p_Name", "Jaded", DbType.String, ParameterDirection.Input, 250));
+
+        //var data = await _dbConfig.ExecuteStoredProcedureWithOutputAsync("add_date", dbDataParameters); 
+
+        // string insrtQry = "INSERT INTO tbl_test(Name) VALUES(@Name);";
+
+        // List<IDbDataParameter> dbDataParameters = new List<IDbDataParameter>();
+        // dbDataParameters.Add(_dbConfig.GetParameter("@Name", "Someone", DbType.String, ParameterDirection.Input, 250));
+
+        // await _dbConfig.ExecuteCommandAsync(insrtQry, dbDataParameters);
+
+        // string query = "SELECT * FROM tbl_test;";
+
+        // IEnumerable<DataModel> results = await _dbConfig.ExecuteQueryAsync<DataModel>(query);
+
+
+        IEnumerable<DataModel> results = await _dbConfig.ExecuteStoredProcedureSelectDataAsync<DataModel>("get_data", new List<IDbDataParameter> { _dbConfig.GetParameter("p_limit", 1, DbType.Int32, ParameterDirection.Input, 250) });
+        
+        return View("Index", results);
     }
 
     public IActionResult Privacy()

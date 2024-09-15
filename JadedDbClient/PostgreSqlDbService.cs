@@ -89,6 +89,54 @@ public class PostgreSqlDbService : IDatabaseService
         return results;
     }
 
+    public async Task<IEnumerable<T>> ExecuteStoredProcedureSelectDataAsync<T>(string storedProcedureName, IEnumerable<IDbDataParameter> parameters = null)
+    {
+        var results = new List<T>();
+
+        using (var connection = new NpgsqlConnection(_connectionString))
+        {
+            await connection.OpenAsync();
+            using (var command = new NpgsqlCommand(storedProcedureName, connection))
+            {
+                command.CommandType = CommandType.StoredProcedure;
+
+                if (parameters != null)
+                {
+                    foreach (var parameter in parameters)
+                    {
+                        command.Parameters.Add(parameter);
+                    }
+                }
+
+                using (var adapter = new NpgsqlDataAdapter(command))
+                {
+                    var dataTable = new DataTable();
+                    adapter.Fill(dataTable);
+
+                    var columnNames = dataTable.Columns.Cast<DataColumn>()
+                                        .Select(column => column.ColumnName).ToList();
+
+                    var properties = typeof(T).GetProperties();
+
+                    foreach (DataRow row in dataTable.Rows)
+                    {
+                        T instance = Activator.CreateInstance<T>();
+                        foreach (var property in properties)
+                        {
+                            if (columnNames.Contains(property.Name) && row[property.Name] != DBNull.Value)
+                            {
+                                property.SetValue(instance, row[property.Name]);
+                            }
+                        }
+                        results.Add(instance);
+                    }
+                }
+            }
+        }
+
+        return results;
+    }
+
     public async Task<IEnumerable<T>> ExecuteStoredProcedureAsync<T>(string storedProcedureName, IEnumerable<IDbDataParameter> parameters = null)
     {
         var results = new List<T>();
