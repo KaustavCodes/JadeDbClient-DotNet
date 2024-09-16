@@ -68,11 +68,11 @@ public class PostgreSqlDbService : IDatabaseService
                     var columnNames = schemaTable.Rows.Cast<DataRow>()
                                         .Select(row => row["ColumnName"].ToString()).ToList();
 
-                    T instance = Activator.CreateInstance<T>();
                     var properties = typeof(T).GetProperties();
 
                     while (reader.Read())
                     {
+                        T instance = Activator.CreateInstance<T>();
                         foreach (var property in properties)
                         {
                             if (columnNames.Contains(property.Name) && !reader.IsDBNull(reader.GetOrdinal(property.Name)))
@@ -80,8 +80,8 @@ public class PostgreSqlDbService : IDatabaseService
                                 property.SetValue(instance, reader[property.Name]);
                             }
                         }
+                        results.Add(instance);
                     }
-                    results.Add(instance);
                 }
             }
         }
