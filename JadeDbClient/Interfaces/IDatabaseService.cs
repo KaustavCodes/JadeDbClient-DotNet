@@ -16,11 +16,58 @@ public interface IDatabaseService
     /// </summary>
     void CloseConnection();
     
+    /// <summary>
+    /// Executes a SQL query asynchronously and maps the result to a collection of objects of type T.
+    /// </summary>
+    /// <typeparam name="T">The type of objects to which the query results will be mapped. The type T should have properties that match the column names in the query result.</typeparam>
+    /// <param name="query">The SQL query to be executed.</param>
+    /// <param name="parameters">A collection of parameters to be used in the SQL query. Default is null.</param>
+    /// <returns>A task representing the asynchronous operation. The task result contains a collection of objects of type T that represent the rows returned by the query.</returns>
+    /// <exception cref="NpgsqlException">Thrown when there is an error executing the query.</exception>
+    /// <exception cref="InvalidOperationException">Thrown when there is an error creating an instance of type T.</exception>
+    /// <exception cref="ArgumentException">Thrown when there is an error setting a property value.</exception>
     Task<IEnumerable<T>> ExecuteQueryAsync<T>(string query, IEnumerable<IDbDataParameter> parameters = null);
+
+    /// <summary>
+    /// Executes a stored procedure asynchronously and maps the result to a collection of objects of type T.
+    /// </summary>
+    /// <typeparam name="T">The type of objects to which the stored procedure results will be mapped. The type T should have a constructor that takes an IDataRecord as a parameter.</typeparam>
+    /// <param name="storedProcedureName">The name of the stored procedure to be executed.</param>
+    /// <param name="parameters">A collection of parameters to be used in the stored procedure. Default is null.</param>
+    /// <returns>A task representing the asynchronous operation. The task result contains a collection of objects of type T that represent the rows returned by the stored procedure.</returns>
+    /// <exception cref="SqlException">Thrown when there is an error executing the stored procedure.</exception>
+    /// <exception cref="InvalidOperationException">Thrown when there is an error creating an instance of type T.</exception>
     Task<IEnumerable<T>> ExecuteStoredProcedureAsync<T>(string storedProcedureName, IEnumerable<IDbDataParameter> parameters = null);
 
+    // <summary>
+    /// Executes a stored procedure asynchronously and maps the result to a collection of objects of type T.
+    /// </summary>
+    /// <typeparam name="T">The type of objects to which the stored procedure results will be mapped. The type T should have properties that match the column names in the result set.</typeparam>
+    /// <param name="storedProcedureName">The name of the stored procedure to be executed.</param>
+    /// <param name="parameters">A collection of parameters to be used in the stored procedure. Default is null.</param>
+    /// <returns>A task representing the asynchronous operation. The task result contains a collection of objects of type T that represent the rows returned by the stored procedure.</returns>
+    /// <exception cref="SqlException">Thrown when there is an error executing the stored procedure.</exception>
+    /// <exception cref="InvalidOperationException">Thrown when there is an error creating an instance of type T.</exception>
+    /// <exception cref="ArgumentException">Thrown when there is an error setting a property value.</exception>
     Task<IEnumerable<T>> ExecuteStoredProcedureSelectDataAsync<T>(string storedProcedureName, IEnumerable<IDbDataParameter> parameters = null);
+
+    /// <summary>
+    /// Executes a stored procedure asynchronously and retrieves the output parameters.
+    /// </summary>
+    /// <param name="storedProcedureName">The name of the stored procedure to be executed.</param>
+    /// <param name="parameters">A collection of parameters to be used in the stored procedure. This includes input, output, and input-output parameters.</param>
+    /// <returns>A task representing the asynchronous operation. The task result contains a dictionary where the keys are the names of the output parameters and the values are their corresponding values.</returns>
+    /// <exception cref="SqlException">Thrown when there is an error executing the stored procedure.</exception>
     Task<Dictionary<string, object>> ExecuteStoredProcedureWithOutputAsync(string storedProcedureName, IEnumerable<IDbDataParameter> parameters);
+
+
+    /// <summary>
+    /// Executes a SQL command asynchronously.
+    /// </summary>
+    /// <param name="commandText">The SQL command to be executed.</param>
+    /// <param name="parameters">A collection of parameters to be used in the SQL command. Default is null.</param>
+    /// <returns>A task representing the asynchronous operation.</returns>
+    /// <exception cref="NpgsqlException">Thrown when there is an error executing the command.</exception>
     Task ExecuteCommandAsync(string command, IEnumerable<IDbDataParameter> parameters = null);
 
     /// <summary>
