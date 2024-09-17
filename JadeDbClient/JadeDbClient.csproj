@@ -4,6 +4,11 @@
     <TargetFramework>net8.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
+    <PackageId>JadeDbClient</PackageId>
+    <Version>1.0.1</Version> 
+    <Authors>Jade Softwares</Authors>
+    <Description>This package provides the fredom of standard ADO.NET connectivity to SqlServer, MySql and PostgreSql databases.</Description>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
   </PropertyGroup>
 
   <ItemGroup>
