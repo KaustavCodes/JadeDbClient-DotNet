@@ -17,27 +17,54 @@ public class HomeController : Controller
         _logger = logger;
     }
 
+    // public async Task<IActionResult> Index()
+    // {
+    //     // List<IDbDataParameter> dbDataParameters = new List<IDbDataParameter>();
+
+    //     // dbDataParameters.Add(_dbConfig.GetParameter("p_name", "Jaded", DbType.String, ParameterDirection.Input, 250));
+
+    //     // var data = await _dbConfig.ExecuteStoredProcedureWithOutputAsync("public.add_date", dbDataParameters); 
+
+    //     string insrtQry = "INSERT INTO public.tbl_test(\"Name\") VALUES(@p_Name);";
+
+    //     List<IDbDataParameter> dbDataParameters = new List<IDbDataParameter>();
+    //     dbDataParameters.Add(_dbConfig.GetParameter("@p_Name", "Someone", DbType.String, ParameterDirection.Input, 250));
+
+    //     await _dbConfig.ExecuteCommandAsync(insrtQry, dbDataParameters);
+
+    //     // string query = "SELECT * FROM public.tbl_test;";
+
+    //     // IEnumerable<DataModel> results = await _dbConfig.ExecuteQueryAsync<DataModel>(query);
+
+
+    //     IEnumerable<DataModel> results = await _dbConfig.ExecuteStoredProcedureSelectDataAsync<DataModel>("public.get_data", new List<IDbDataParameter> { _dbConfig.GetParameter("p_limit", 1, DbType.Int32, ParameterDirection.Input, 250) });
+        
+    //     return View(results);
+    // }
+
     public async Task<IActionResult> Index()
     {
-        // List<IDbDataParameter> dbDataParameters = new List<IDbDataParameter>();
-
-        // dbDataParameters.Add(_dbConfig.GetParameter("p_name", "Jaded", DbType.String, ParameterDirection.Input, 250));
-
-        // var data = await _dbConfig.ExecuteStoredProcedureWithOutputAsync("public.add_date", dbDataParameters); 
-
-        string insrtQry = "INSERT INTO public.tbl_test(\"Name\") VALUES(@p_Name);";
-
         List<IDbDataParameter> dbDataParameters = new List<IDbDataParameter>();
-        dbDataParameters.Add(_dbConfig.GetParameter("@p_Name", "Someone", DbType.String, ParameterDirection.Input, 250));
 
-        await _dbConfig.ExecuteCommandAsync(insrtQry, dbDataParameters);
+        dbDataParameters.Add(_dbConfig.GetParameter("p_name", "Jaded", DbType.String, ParameterDirection.Input, 250));
+
+        // var data = await _dbConfig.ExecuteStoredProcedureWithOutputAsync("add_date", dbDataParameters); 
+
+        int rowsAffected = await _dbConfig.ExecuteStoredProcedureAsync("add_date", dbDataParameters);
+
+        // string insrtQry = "INSERT INTO tbl_test(\"Name\") VALUES(@p_Name);";
+
+        // List<IDbDataParameter> dbDataParameters = new List<IDbDataParameter>();
+        // dbDataParameters.Add(_dbConfig.GetParameter("@p_Name", "Someone", DbType.String, ParameterDirection.Input, 250));
+
+        // await _dbConfig.ExecuteCommandAsync(insrtQry, dbDataParameters);
 
         // string query = "SELECT * FROM public.tbl_test;";
 
         // IEnumerable<DataModel> results = await _dbConfig.ExecuteQueryAsync<DataModel>(query);
 
 
-        IEnumerable<DataModel> results = await _dbConfig.ExecuteStoredProcedureSelectDataAsync<DataModel>("public.get_data", new List<IDbDataParameter> { _dbConfig.GetParameter("p_limit", 1, DbType.Int32, ParameterDirection.Input, 250) });
+        IEnumerable<DataModel> results = await _dbConfig.ExecuteStoredProcedureSelectDataAsync<DataModel>("get_data", new List<IDbDataParameter> { _dbConfig.GetParameter("p_limit", 100, DbType.Int32, ParameterDirection.Input, 250) });
         
         return View(results);
     }

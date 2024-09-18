@@ -29,15 +29,13 @@ public interface IDatabaseService
     Task<IEnumerable<T>> ExecuteQueryAsync<T>(string query, IEnumerable<IDbDataParameter> parameters = null);
 
     /// <summary>
-    /// Executes a stored procedure asynchronously and maps the result to a collection of objects of type T.
+    /// Executes a stored procedure asynchronously and returns the number of rows affected.
     /// </summary>
-    /// <typeparam name="T">The type of objects to which the stored procedure results will be mapped. The type T should have a constructor that takes an IDataRecord as a parameter.</typeparam>
     /// <param name="storedProcedureName">The name of the stored procedure to be executed.</param>
     /// <param name="parameters">A collection of parameters to be used in the stored procedure. Default is null.</param>
-    /// <returns>A task representing the asynchronous operation. The task result contains a collection of objects of type T that represent the rows returned by the stored procedure.</returns>
+    /// <returns>The number of rows effected after executing the stored procedure.</returns>
     /// <exception cref="SqlException">Thrown when there is an error executing the stored procedure.</exception>
-    /// <exception cref="InvalidOperationException">Thrown when there is an error creating an instance of type T.</exception>
-    Task<IEnumerable<T>> ExecuteStoredProcedureAsync<T>(string storedProcedureName, IEnumerable<IDbDataParameter> parameters = null);
+    Task<int> ExecuteStoredProcedureAsync(string storedProcedureName, IEnumerable<IDbDataParameter> parameters = null);
 
     // <summary>
     /// Executes a stored procedure asynchronously and maps the result to a collection of objects of type T.

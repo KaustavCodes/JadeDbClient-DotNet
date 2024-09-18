@@ -175,18 +175,14 @@ public class MySqlDbService : IDatabaseService
     }
     
     /// <summary>
-    /// Executes a stored procedure asynchronously and maps the result to a collection of objects of type T.
+    /// Executes a stored procedure asynchronously and returns the number of rows affected.
     /// </summary>
-    /// <typeparam name="T">The type of objects to which the stored procedure results will be mapped. The type T should have a constructor that takes an IDataRecord as a parameter.</typeparam>
     /// <param name="storedProcedureName">The name of the stored procedure to be executed.</param>
     /// <param name="parameters">A collection of parameters to be used in the stored procedure. Default is null.</param>
-    /// <returns>A task representing the asynchronous operation. The task result contains a collection of objects of type T that represent the rows returned by the stored procedure.</returns>
+    /// <returns>The number of rows effected after executing the stored procedure.</returns>
     /// <exception cref="SqlException">Thrown when there is an error executing the stored procedure.</exception>
-    /// <exception cref="InvalidOperationException">Thrown when there is an error creating an instance of type T.</exception>
-    public async Task<IEnumerable<T>> ExecuteStoredProcedureAsync<T>(string storedProcedureName, IEnumerable<IDbDataParameter> parameters = null)
+    public async Task<int> ExecuteStoredProcedureAsync(string storedProcedureName, IEnumerable<IDbDataParameter> parameters = null)
     {
-        var results = new List<T>();
-
         using (var connection = new MySqlConnection(_connectionString))
         {
             await connection.OpenAsync();
@@ -202,18 +198,11 @@ public class MySqlDbService : IDatabaseService
                     }
                 }
 
-                using (var reader = await command.ExecuteReaderAsync())
-                {
-                    while (await reader.ReadAsync())
-                    {
-                        // Assuming T has a constructor that takes an IDataRecord
-                        results.Add((T)Activator.CreateInstance(typeof(T), reader));
-                    }
-                }
+                int affectedRows = await command.ExecuteNonQueryAsync();
+
+                return affectedRows;
             }
         }
-
-        return results;
     }
 
     /// <summary>
