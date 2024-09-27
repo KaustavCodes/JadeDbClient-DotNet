@@ -1,5 +1,3 @@
-using JadedDbClient.Interfaces;
-using JadedDbClient;
 using JadeDbClient.Initialize;
 
 var builder = WebApplication.CreateBuilder(args);

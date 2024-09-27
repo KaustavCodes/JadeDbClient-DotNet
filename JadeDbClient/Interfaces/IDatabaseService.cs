@@ -69,7 +69,7 @@ public interface IDatabaseService
     Task ExecuteCommandAsync(string command, IEnumerable<IDbDataParameter> parameters = null);
 
     /// <summary>
-    /// Creates a new instance of an <see cref="IDbDataParameter"/> for SQL Server.
+    /// Creates a new instance of an <see cref="IDbDataParameter"/> for your Database.
     /// </summary>
     /// <param name="name">The name of the parameter.</param>
     /// <param name="value">The value of the parameter.</param>
