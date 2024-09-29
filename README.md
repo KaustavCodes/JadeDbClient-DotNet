@@ -23,17 +23,19 @@ Or use the NuGet Package Manager:
 Install-Package JadeDbClient
 ```
 
-Usage
+## Usage
 
 Before we begin we need to let the plugin know what atabase we are using and where the plugin needs to connect to.
 
-To do this we need to add the following to the web.config or appsettings.json file
+To do this we need to add the following to the web.config or appsettings.json file.
+
+***Important:** Remember to change the connections string as per your database.*
 
 ### For MySql Database
 ```
 "DatabaseType": "MySql",
 "ConnectionStrings": {
-    "DbConnection": "Server=localhost;Port=8889;Database=testingdb;User Id=root;Password=root;"
+    "DbConnection": "Server=localhost;Port=8889;Database=[Datase Name];User Id=[DB User Name];Password=[Db Password];"
 }
 ```
 
@@ -41,7 +43,7 @@ To do this we need to add the following to the web.config or appsettings.json fi
 ```
 "DatabaseType": "MsSql",
 "ConnectionStrings": {
-    "DbConnection": "Server=localhost;Database=TestingDb;User Id=sa;Password=benqacer@123;TrustServerCertificate=True;"
+    "DbConnection": "Server=localhost;Database=TestingDb;User Id=[DB User Name];Password=[Db Password];TrustServerCertificate=True;"
 }
 ```
 
@@ -49,14 +51,14 @@ To do this we need to add the following to the web.config or appsettings.json fi
 ```
 "DatabaseType": "PostgreSQL",
 "ConnectionStrings": {
-    "DbConnection": "Host=localhost;Database=TestingDb;Username=postgres;Password=pass@123;SearchPath=JadedSoftwares;"
+    "DbConnection": "Host=localhost;Database=TestingDb;Username=[DB User Name];Password=[Db Password];SearchPath=JadedSoftwares;"
 }
 ```
 
 Next we need to load the plugin on application start. We can do this in the **Program.cs** file
 
 
-We need thse 2 lines
+We need these 2 lines
 
 ### Add the using statement
 
@@ -125,7 +127,7 @@ Method Signature: **Task<Dictionary<string, object>> ExecuteStoredProcedureWithO
 //Execute a stored proceude with output parameter
 List<IDbDataParameter> dbDataParameters = new List<IDbDataParameter>();
 
-dbDataParameters.Add(_dbConfig.GetParameter("p_name", "Jaded", DbType.String, ParameterDirection.Input, 250));
+dbDataParameters.Add(_dbConfig.GetParameter("p_name", "John Doe", DbType.String, ParameterDirection.Input, 250));
 dbDataParameters.Add(_dbConfig.GetParameter("p_OutputParam", "test", DbType.String, ParameterDirection.Output, 250));
 
 Dictionary<string, object> outputParameters = await _dbConfig.ExecuteStoredProcedureWithOutputAsync("add_date", dbDataParameters); 
@@ -158,7 +160,7 @@ Method Signature: **Task<int> ExecuteStoredProcedureAsync(string storedProcedure
 
 List<IDbDataParameter> dbDataParameters = new List<IDbDataParameter>();
 
-dbDataParameters.Add(_dbConfig.GetParameter("p_name", "Jaded", DbType.String, ParameterDirection.Input, 250));
+dbDataParameters.Add(_dbConfig.GetParameter("p_name", "John Doe", DbType.String, ParameterDirection.Input, 250));
 
 int rowsAffected = await _dbConfig.ExecuteStoredProcedureAsync("add_date", dbDataParameters);
 ```
