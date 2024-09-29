@@ -27,15 +27,11 @@ jobs:
     - name: Run tests
       run: dotnet test --no-restore --verbosity normal JadeDbClient
 
-    - name: Publish to GitHub Packages
+    - name: Pack NuGet package
       run: dotnet pack --configuration Release -o ./nupkg JadeDbClient
 
     - name: Publish to GitHub Packages
       run: dotnet nuget push ./nupkg/*.nupkg -s https://nuget.pkg.github.com/JadeSoftwares/index.json -k ${{ secrets.MY_GITHUB_TOKEN }}
-      env:
-        MY_GITHUB_TOKEN: ${{ secrets.MY_GITHUB_TOKEN }}
 
     - name: Publish to NuGet
       run: dotnet nuget push ./nupkg/*.nupkg -k ${{ secrets.NUGET_API_KEY }} -s https://api.nuget.org/v3/index.json
-      env:
-        NUGET_API_KEY: ${{ secrets.NUGET_API_KEY }}
