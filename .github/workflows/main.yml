@@ -29,6 +29,12 @@ jobs:
 
     - name: Publish to GitHub Packages
       run: dotnet pack --configuration Release -o ./nupkg JadeDbClient
+
+    - name: Debug - Print masked secret
+      run: echo "MY_GITHUB_TOKEN is set"
+      env:
+        MY_GITHUB_TOKEN: ${{ secrets.MY_GITHUB_TOKEN }}
+
     - name: Publish to GitHub Packages
       run: dotnet nuget push ./nupkg/*.nupkg -s https://nuget.pkg.github.com/JadeSoftwares/index.json -k ${{ secrets.MY_GITHUB_TOKEN }}
       env:
