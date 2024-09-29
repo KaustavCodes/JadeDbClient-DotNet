@@ -4,7 +4,7 @@
     <TargetFramework>net8.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
-    <PackageId>JadeDbClient.JadeSoftwares</PackageId>
+    <PackageId>JadeDbClient</PackageId>
     <Version>1.0.0</Version> 
     <Authors>Jade Softwares</Authors>
     <Description>This package provides the freedom of ADO.NET connectivity to SqlServer, MySql and PostgreSql databases. Same methods but ability to change between databases.</Description>
