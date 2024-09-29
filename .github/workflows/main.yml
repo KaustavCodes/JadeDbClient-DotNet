@@ -31,7 +31,7 @@ jobs:
       run: dotnet pack --configuration Release -o ./nupkg JadeDbClient
 
     - name: Publish to GitHub Packages
-      run: dotnet nuget push ./nupkg/*.nupkg -s https://nuget.pkg.github.com/JadeSoftwares/index.json -k ${{ secrets.MY_GITHUB_TOKEN }}
+      run: dotnet nuget push ./nupkg/*.nupkg -s https://nuget.pkg.github.com/KaustavCodes/index.json -k ${{ secrets.MY_GITHUB_TOKEN }}
       env:
         MY_GITHUB_TOKEN: ${{ secrets.MY_GITHUB_TOKEN }}
 
