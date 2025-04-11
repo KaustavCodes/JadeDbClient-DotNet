@@ -1,5 +1,5 @@
-using JadedDbClient;
-using JadedDbClient.Interfaces;
+using JadeDbClient;
+using JadeDbClient.Interfaces;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using System;

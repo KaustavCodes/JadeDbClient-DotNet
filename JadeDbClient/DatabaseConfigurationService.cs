@@ -1,6 +1,6 @@
 using Microsoft.Extensions.Configuration;
 
-namespace JadedDbClient;
+namespace JadeDbClient;
 
 public class DatabaseConfigurationService
 {

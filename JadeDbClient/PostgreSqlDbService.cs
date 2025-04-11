@@ -1,12 +1,12 @@
 using System.Data;
 using System.Collections.Generic;
 using System.Threading.Tasks;
-using JadedDbClient.Interfaces;
+using JadeDbClient.Interfaces;
 using Microsoft.Extensions.Configuration;
 using Npgsql;
 using System.Reflection;
 
-namespace JadedDbClient;
+namespace JadeDbClient;
 
 public class PostgreSqlDbService : IDatabaseService
 {
@@ -270,5 +270,32 @@ public class PostgreSqlDbService : IDatabaseService
                 await command.ExecuteNonQueryAsync();
             }
         }
+    }
+
+    /// <summary>
+    /// Bulk inserts a DataTable into a PostgreSQL table.
+    /// </summary>
+    /// <param name="dataTable">The DataTable to insert.</param>
+    /// <param name="tableName">The target PostgreSQL table name.</param>
+    public async Task<bool> InsertDataTable(string tableName, DataTable dataTable)
+    {
+        using var connection = new NpgsqlConnection(_connectionString);
+        connection.Open();
+
+        // Use COPY command for efficient bulk insertion
+        using var writer = connection.BeginBinaryImport($"COPY {tableName} ({string.Join(", ", dataTable.Columns.Cast<DataColumn>().Select(c => c.ColumnName))}) FROM STDIN (FORMAT BINARY)");
+
+        foreach (DataRow row in dataTable.Rows)
+        {
+            writer.StartRow();
+            foreach (var item in row.ItemArray)
+            {
+                writer.Write(item ?? DBNull.Value);
+            }
+        }
+
+        writer.Complete();
+
+        return true;
     }
 }
