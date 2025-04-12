@@ -1,6 +1,6 @@
 using System.Data;
 using System.Diagnostics;
-using JadedDbClient.Interfaces;
+using JadeDbClient.Interfaces;
 using Microsoft.AspNetCore.Mvc;
 using WebTest.Models;
 
@@ -60,7 +60,7 @@ public class HomeController : Controller
         
         //Execute a stored procedure without output parameter
 
-        List<IDbDataParameter> dbDataParameters = new List<IDbDataParameter>();
+        //List<IDbDataParameter> dbDataParameters = new List<IDbDataParameter>();
 
         dbDataParameters.Add(_dbConfig.GetParameter("p_name", "Jaded", DbType.String, ParameterDirection.Input, 250));
 
@@ -82,7 +82,7 @@ public class HomeController : Controller
         IEnumerable<DataModel> results = await _dbConfig.ExecuteQueryAsync<DataModel>(query);
 
         // // Execute a stored procedure and return the result
-        IEnumerable<DataModel> results = await _dbConfig.ExecuteStoredProcedureSelectDataAsync<DataModel>("get_data", new List<IDbDataParameter> { _dbConfig.GetParameter("p_limit", 100, DbType.Int32, ParameterDirection.Input, 250) });
+        //IEnumerable<DataModel> results = await _dbConfig.ExecuteStoredProcedureSelectDataAsync<DataModel>("get_data", new List<IDbDataParameter> { _dbConfig.GetParameter("p_limit", 100, DbType.Int32, ParameterDirection.Input, 250) });
         
         return View(results);
     }
