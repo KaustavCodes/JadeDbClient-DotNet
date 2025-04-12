@@ -151,6 +151,18 @@ string query = "SELECT * FROM tbl_test;";
 IEnumerable<DataModel> results = await _dbConfig.ExecuteQueryAsync<DataModel>(query);
 ```
 
+### ExecuteScalar: Executes a query and returns a single data item
+Use this function to execute any query which returns a single vaule. eg: row count.
+Method Signature: **Task<T?> ExecuteScalar<T>(string query, IEnumerable<IDbDataParameter> parameters = null);**
+
+```
+//eg: Bulk Insert data into the table
+
+string checkTableExistsQuery = $"SELECT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'tbl_test');";
+bool dataPresent = await _databaseService.ExecuteScalar<bool>(checkTableExistsQuery);
+
+```
+
 ### ExecuteStoredProcedureAsync: Execute a stored procedure without output parameters
 Executes a stored procedure asynchronously and returns the number of rows affected.
 Method Signature: **Task<int> ExecuteStoredProcedureAsync(string storedProcedureName, IEnumerable<IDbDataParameter> parameters = null);**

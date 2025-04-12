@@ -29,6 +29,13 @@ public interface IDatabaseService
     Task<IEnumerable<T>> ExecuteQueryAsync<T>(string query, IEnumerable<IDbDataParameter> parameters = null);
 
     /// <summary>
+    /// Executes a query and returns a single value (scalar) result.
+    /// </summary>
+    /// <param name="query">The SQL query to be executed.</param>
+    /// <param name="parameters">>A collection of parameters to be used in the SQL query. Default is null.</param>
+    Task<T?> ExecuteScalar<T>(string query, IEnumerable<IDbDataParameter> parameters = null);
+
+    /// <summary>
     /// Executes a stored procedure asynchronously and returns the number of rows affected.
     /// </summary>
     /// <param name="storedProcedureName">The name of the stored procedure to be executed.</param>

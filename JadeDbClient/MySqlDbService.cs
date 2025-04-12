@@ -116,6 +116,40 @@ public class MySqlDbService : IDatabaseService
         return results;
     }
 
+    /// <summary>
+    /// Executes a query and returns a single value (scalar) result.
+    /// </summary>
+    /// <param name="query">The SQL query to be executed.</param>
+    /// <param name="parameters">>A collection of parameters to be used in the SQL query. Default is null.</param>
+    public async Task<T?> ExecuteScalar<T>(string query, IEnumerable<IDbDataParameter> parameters = null)
+    {
+        using (var connection = new MySqlConnection(_connectionString))
+        {
+            connection.Open();
+            using (var command = new MySqlCommand(query, connection))
+            {
+                if (parameters != null)
+                {
+                    foreach (var parameter in parameters)
+                    {
+                        command.Parameters.Add(parameter);
+                    }
+                }
+
+                var data = await command.ExecuteScalarAsync();
+
+                if (data != null && data != DBNull.Value)
+                {
+                    return (T)data;
+                }
+                else
+                {
+                    return default(T);
+                }
+            }
+        }
+    }
+
     // <summary>
     /// Executes a stored procedure asynchronously and maps the result to a collection of objects of type T.
     /// </summary>
