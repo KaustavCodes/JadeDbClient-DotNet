@@ -1,6 +1,6 @@
 using System.Data;
 
-namespace JadedDbClient.Interfaces;
+namespace JadeDbClient.Interfaces;
 
 public interface IDatabaseService
 {
@@ -78,4 +78,11 @@ public interface IDatabaseService
     /// <param name="size">The size of the parameter. Default is 0.</param>
     /// <returns>A new instance of <see cref="SqlParameter"/> configured with the specified properties.</returns>
     IDbDataParameter GetParameter(string name, object value, DbType dbType, ParameterDirection direction = ParameterDirection.Input, int size = 0);
+
+    /// <summary>
+    /// Bulk inserts a DataTable into a Database table.
+    /// </summary>
+    /// <param name="dataTable">The DataTable to insert.</param>
+    /// <param name="tableName">The target PostgreSQL table name.</param>
+    Task<bool> InsertDataTable(string tableName, DataTable dataTable);
 }

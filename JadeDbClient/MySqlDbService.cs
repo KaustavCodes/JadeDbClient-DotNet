@@ -1,12 +1,12 @@
 using System.Data;
 using System.Collections.Generic;
 using System.Threading.Tasks;
-using JadedDbClient.Interfaces;
+using JadeDbClient.Interfaces;
 using Microsoft.Extensions.Configuration;
 using MySql.Data.MySqlClient;
 using System.Reflection;
 
-namespace JadedDbClient;
+namespace JadeDbClient;
 
 public class MySqlDbService : IDatabaseService
 {
@@ -270,6 +270,48 @@ public class MySqlDbService : IDatabaseService
 
                 await command.ExecuteNonQueryAsync();
             }
+        }
+    }
+
+    /// <summary>
+    /// Bulk inserts a DataTable into a PostgreSQL table.
+    /// </summary>
+    /// <param name="dataTable">The DataTable to insert.</param>
+    /// <param name="tableName">The target PostgreSQL table name.</param>
+    public async Task<bool> InsertDataTable(string tableName, DataTable dataTable)
+    {
+        using var connection = new MySqlConnection(_connectionString);
+        await connection.OpenAsync();
+
+        using var transaction = await connection.BeginTransactionAsync();
+        try
+        {
+            // Build the parameterized INSERT query
+            var columns = dataTable.Columns.Cast<DataColumn>().Select(c => $"`{c.ColumnName}`").ToList();
+            var columnList = string.Join(", ", columns);
+            var paramPlaceholders = string.Join(", ", columns.Select((_, i) => $"@p{i}"));
+            var insertQuery = $"INSERT INTO `{tableName}` ({columnList}) VALUES ({paramPlaceholders})";
+
+            foreach (DataRow row in dataTable.Rows)
+            {
+                using var command = new MySqlCommand(insertQuery, connection, transaction);
+                
+                // Add parameters for the current row
+                for (int i = 0; i < columns.Count; i++)
+                {
+                    command.Parameters.AddWithValue($"@p{i}", row[i]);
+                }
+
+                await command.ExecuteNonQueryAsync();
+            }
+
+            await transaction.CommitAsync();
+            return true;
+        }
+        catch
+        {
+            await transaction.RollbackAsync();
+            throw;
         }
     }
 }

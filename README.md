@@ -190,4 +190,17 @@ dbDataParameters.Add(_dbConfig.GetParameter("@Name", "Someone", DbType.String, P
 await _dbConfig.ExecuteCommandAsync(insrtQry, dbDataParameters);
 ```
 
+### InsertDataTable: Bulk insert a data table into the database
+Bulk inserts data into a database table. For this to work, the DataTable columns names need to match the Column names in the actual database and the table also needs to exist.
+Method Signature: **Task<bool> InsertDataTable(string tableName, DataTable dataTable);**
+
+```
+//eg: Bulk Insert data into the table
+
+DataTable tbl = new DataTable(); // This will be your actual data table with columns mathing your actual database table
+string tableName = "tbl_ToInsertInto"; //This will be the name of the table in the database.
+await _dbConfig.InsertDataTable(tableName, tbl);
+
+```
+
 Happy Coding! 

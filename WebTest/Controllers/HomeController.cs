@@ -1,6 +1,6 @@
 using System.Data;
 using System.Diagnostics;
-using JadedDbClient.Interfaces;
+using JadeDbClient.Interfaces;
 using Microsoft.AspNetCore.Mvc;
 using WebTest.Models;
 

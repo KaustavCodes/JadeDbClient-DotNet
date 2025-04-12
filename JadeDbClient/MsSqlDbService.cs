@@ -1,12 +1,12 @@
 using System.Data;
 using System.Collections.Generic;
 using System.Threading.Tasks;
-using JadedDbClient.Interfaces;
+using JadeDbClient.Interfaces;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Data.SqlClient;
 using System.Reflection;
 
-namespace JadedDbClient;
+namespace JadeDbClient;
 
 public class MsSqlDbService : IDatabaseService
 {
@@ -273,5 +273,33 @@ public class MsSqlDbService : IDatabaseService
                 await command.ExecuteNonQueryAsync();
             }
         }
+    }
+
+    /// <summary>
+    /// Bulk inserts a DataTable into a PostgreSQL table.
+    /// </summary>
+    /// <param name="dataTable">The DataTable to insert.</param>
+    /// <param name="tableName">The target PostgreSQL table name.</param>
+    public async Task<bool> InsertDataTable(string tableName, DataTable dataTable)
+    {
+        using var connection = new SqlConnection(_connectionString);
+        await connection.OpenAsync();
+
+        using (var bulkCopy = new SqlBulkCopy(connection))
+        {
+            // Set the destination table name
+            bulkCopy.DestinationTableName = tableName;
+
+            // Map columns from the DataTable to the SQL Server table
+            foreach (DataColumn column in dataTable.Columns)
+            {
+                bulkCopy.ColumnMappings.Add(column.ColumnName, column.ColumnName);
+            }
+
+            // Perform the bulk copy
+            await bulkCopy.WriteToServerAsync(dataTable);
+        }
+
+        return true;
     }
 }
