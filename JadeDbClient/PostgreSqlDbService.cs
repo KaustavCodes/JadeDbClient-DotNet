@@ -354,13 +354,17 @@ public class PostgreSqlDbService : IDatabaseService
                 {
                     writer.Write(DBNull.Value);
                 }
+                else if (item is System.Text.Json.Nodes.JsonObject json)
+                {
+                    writer.Write(json.ToJsonString(), NpgsqlTypes.NpgsqlDbType.Jsonb);
+                }
+                else if (item is System.Text.Json.JsonElement jsonElement && jsonElement.ValueKind == System.Text.Json.JsonValueKind.Object)
+                {
+                    writer.Write(jsonElement.GetRawText(), NpgsqlTypes.NpgsqlDbType.Jsonb);
+                }
                 else if (item is Newtonsoft.Json.Linq.JObject jObj)
                 {
                     writer.Write(jObj.ToString(Newtonsoft.Json.Formatting.None), NpgsqlTypes.NpgsqlDbType.Jsonb);
-                }
-                else if (item is System.Text.Json.JsonElement jsonElement)
-                {
-                    writer.Write(jsonElement.GetRawText(), NpgsqlTypes.NpgsqlDbType.Jsonb);
                 }
                 else
                 {
