@@ -15,7 +15,7 @@ public interface IDatabaseService
     /// Close the connection to the database
     /// </summary>
     void CloseConnection();
-    
+
     /// <summary>
     /// Executes a SQL query asynchronously and maps the result to a collection of objects of type T.
     /// </summary>
@@ -92,4 +92,11 @@ public interface IDatabaseService
     /// <param name="dataTable">The DataTable to insert.</param>
     /// <param name="tableName">The target PostgreSQL table name.</param>
     Task<bool> InsertDataTable(string tableName, DataTable dataTable);
+    
+    /// <summary>
+    /// Bulk inserts a DataTable into a Database table with JsonDatas.
+    /// </summary>
+    /// <param name="dataTable">The DataTable to insert.</param>
+    /// <param name="tableName">The target PostgreSQL table name.</param>
+    Task<bool> InsertDataTableWithJsonData(string tableName, DataTable dataTable);
 }

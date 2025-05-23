@@ -93,7 +93,7 @@ public class MySqlDbService : IDatabaseService
                     var columnNames = schemaTable.Rows.Cast<DataRow>()
                                         .Select(row => row["ColumnName"].ToString()).ToList();
 
-                    
+
                     var properties = typeof(T).GetProperties();
 
                     while (reader.Read())
@@ -108,7 +108,7 @@ public class MySqlDbService : IDatabaseService
                         }
                         results.Add(instance);
                     }
-                    
+
                 }
             }
         }
@@ -207,7 +207,7 @@ public class MySqlDbService : IDatabaseService
 
         return results;
     }
-    
+
     /// <summary>
     /// Executes a stored procedure asynchronously and returns the number of rows affected.
     /// </summary>
@@ -329,7 +329,7 @@ public class MySqlDbService : IDatabaseService
             foreach (DataRow row in dataTable.Rows)
             {
                 using var command = new MySqlCommand(insertQuery, connection, transaction);
-                
+
                 // Add parameters for the current row
                 for (int i = 0; i < columns.Count; i++)
                 {
@@ -339,6 +339,62 @@ public class MySqlDbService : IDatabaseService
                 await command.ExecuteNonQueryAsync();
             }
 
+            await transaction.CommitAsync();
+            return true;
+        }
+        catch
+        {
+            await transaction.RollbackAsync();
+            throw;
+        }
+    }
+    
+    /// <summary>
+    /// Bulk inserts a DataTable with JSON data into a MySQL table.
+    /// </summary>
+    /// <param name="dataTable">The DataTable to insert.</param>
+    /// <param name="tableName">The target MySQL table name.</param>
+    public async Task<bool> InsertDataTableWithJsonData(string tableName, DataTable dataTable)
+    {
+        using var connection = new MySqlConnection(_connectionString);
+        await connection.OpenAsync();
+    
+        using var transaction = await connection.BeginTransactionAsync();
+        try
+        {
+            var columns = dataTable.Columns.Cast<DataColumn>().Select(c => $"`{c.ColumnName}`").ToList();
+            var columnList = string.Join(", ", columns);
+            var paramPlaceholders = string.Join(", ", columns.Select((_, i) => $"@p{i}"));
+            var insertQuery = $"INSERT INTO `{tableName}` ({columnList}) VALUES ({paramPlaceholders})";
+    
+            foreach (DataRow row in dataTable.Rows)
+            {
+                using var command = new MySqlCommand(insertQuery, connection, transaction);
+    
+                for (int i = 0; i < columns.Count; i++)
+                {
+                    var item = row[i];
+                    if (item == null || item == DBNull.Value)
+                    {
+                        command.Parameters.AddWithValue($"@p{i}", DBNull.Value);
+                    }
+                    else if (item is Newtonsoft.Json.Linq.JObject jObj)
+                    {
+                        command.Parameters.AddWithValue($"@p{i}", jObj.ToString(Newtonsoft.Json.Formatting.None));
+                    }
+                    else if (item is System.Text.Json.JsonElement jsonElement)
+                    {
+                        command.Parameters.AddWithValue($"@p{i}", jsonElement.GetRawText());
+                    }
+                    else
+                    {
+                        command.Parameters.AddWithValue($"@p{i}", item);
+                    }
+                }
+    
+                await command.ExecuteNonQueryAsync();
+            }
+    
             await transaction.CommitAsync();
             return true;
         }

@@ -59,7 +59,7 @@ public class PostgreSqlDbService : IDatabaseService
             Size = size
         };
     }
-    
+
     /// <summary>
     /// Executes a SQL query asynchronously and maps the result to a collection of objects of type T.
     /// </summary>
@@ -135,7 +135,7 @@ public class PostgreSqlDbService : IDatabaseService
                 }
 
                 var data = await command.ExecuteScalarAsync();
-                if(data != null && data != DBNull.Value)
+                if (data != null && data != DBNull.Value)
                 {
                     return (T)data;
                 }
@@ -235,7 +235,7 @@ public class PostgreSqlDbService : IDatabaseService
             }
         }
     }
-    
+
     /// <summary>
     /// Executes a stored procedure asynchronously and retrieves the output parameters.
     /// </summary>
@@ -276,7 +276,7 @@ public class PostgreSqlDbService : IDatabaseService
 
         return outputValues;
     }
-    
+
 
     /// <summary>
     /// Executes a SQL command asynchronously.
@@ -329,6 +329,48 @@ public class PostgreSqlDbService : IDatabaseService
 
         writer.Complete();
 
+        return true;
+    }
+    
+    /// <summary>
+    /// Bulk inserts a DataTable with jsonObject into a PostgreSQL table.
+    /// </summary>
+    /// <param name="dataTable">The DataTable to insert.</param>
+    /// <param name="tableName">The target PostgreSQL table name.</param>
+    public async Task<bool> InsertDataTableWithJsonData(string tableName, DataTable dataTable)
+    {
+        using var connection = new NpgsqlConnection(_connectionString);
+        connection.Open();
+    
+        using var writer = connection.BeginBinaryImport(
+            $"COPY {tableName} ({string.Join(", ", dataTable.Columns.Cast<DataColumn>().Select(c => c.ColumnName))}) FROM STDIN (FORMAT BINARY)");
+    
+        foreach (DataRow row in dataTable.Rows)
+        {
+            writer.StartRow();
+            foreach (var item in row.ItemArray)
+            {
+                if (item == null || item == DBNull.Value)
+                {
+                    writer.Write(DBNull.Value);
+                }
+                else if (item is Newtonsoft.Json.Linq.JObject jObj)
+                {
+                    writer.Write(jObj.ToString(Newtonsoft.Json.Formatting.None), NpgsqlTypes.NpgsqlDbType.Jsonb);
+                }
+                else if (item is System.Text.Json.JsonElement jsonElement)
+                {
+                    writer.Write(jsonElement.GetRawText(), NpgsqlTypes.NpgsqlDbType.Jsonb);
+                }
+                else
+                {
+                    writer.Write(item);
+                }
+            }
+        }
+    
+        writer.Complete();
+    
         return true;
     }
 }
