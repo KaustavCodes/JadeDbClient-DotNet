@@ -93,7 +93,7 @@ public class MsSqlDbService : IDatabaseService
                     var columnNames = schemaTable.Rows.Cast<DataRow>()
                                         .Select(row => row["ColumnName"].ToString()).ToList();
 
-                    
+
                     var properties = typeof(T).GetProperties();
 
                     while (reader.Read())
@@ -108,7 +108,7 @@ public class MsSqlDbService : IDatabaseService
                         }
                         results.Add(instance);
                     }
-                    
+
                 }
             }
         }
@@ -234,7 +234,7 @@ public class MsSqlDbService : IDatabaseService
 
                 var affectedRows = await command.ExecuteNonQueryAsync();
 
-                
+
 
                 return affectedRows;
             }
@@ -281,7 +281,7 @@ public class MsSqlDbService : IDatabaseService
 
         return outputValues;
     }
-    
+
     /// <summary>
     /// Executes a SQL command asynchronously.
     /// </summary>
@@ -334,6 +334,58 @@ public class MsSqlDbService : IDatabaseService
             await bulkCopy.WriteToServerAsync(dataTable);
         }
 
+        return true;
+    }
+    
+    /// <summary>
+    /// Bulk inserts a DataTable with JSON data into a SQL Server table.
+    /// </summary>
+    /// <param name="dataTable">The DataTable to insert.</param>
+    /// <param name="tableName">The target SQL Server table name.</param>
+    public async Task<bool> InsertDataTableWithJsonData(string tableName, DataTable dataTable)
+    {
+        // Clone the structure and copy data, serializing JSON objects as needed
+        var processedTable = dataTable.Clone();
+    
+        foreach (DataRow row in dataTable.Rows)
+        {
+            var newRow = processedTable.NewRow();
+            for (int i = 0; i < dataTable.Columns.Count; i++)
+            {
+                var item = row[i];
+                if (item == null || item == DBNull.Value)
+                {
+                    newRow[i] = DBNull.Value;
+                }
+                else if (item is Newtonsoft.Json.Linq.JObject jObj)
+                {
+                    newRow[i] = jObj.ToString(Newtonsoft.Json.Formatting.None);
+                }
+                else if (item is System.Text.Json.JsonElement jsonElement)
+                {
+                    newRow[i] = jsonElement.GetRawText();
+                }
+                else
+                {
+                    newRow[i] = item;
+                }
+            }
+            processedTable.Rows.Add(newRow);
+        }
+    
+        using var connection = new SqlConnection(_connectionString);
+        await connection.OpenAsync();
+    
+        using (var bulkCopy = new SqlBulkCopy(connection))
+        {
+            bulkCopy.DestinationTableName = tableName;
+            foreach (DataColumn column in processedTable.Columns)
+            {
+                bulkCopy.ColumnMappings.Add(column.ColumnName, column.ColumnName);
+            }
+            await bulkCopy.WriteToServerAsync(processedTable);
+        }
+    
         return true;
     }
 }
