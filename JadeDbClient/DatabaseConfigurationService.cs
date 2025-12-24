@@ -21,6 +21,6 @@ public class DatabaseConfigurationService
     public string GetLicenseType()
     {
         // Assuming there's a configuration key that specifies the database type
-        return _configuration["JadeDbLiscence"];
+        return _configuration["JadeDbLicense"];
     }
 }
