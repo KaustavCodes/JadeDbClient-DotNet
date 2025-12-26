@@ -5,8 +5,13 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <PackageId>JadeDbClient</PackageId>
+<<<<<<< Updated upstream
     <Version>1.0.6</Version> 
     <Authors>PrimaKlick</Authors>
+=======
+    <Version>1.0.8</Version> 
+    <Authors>KausCoder</Authors>
+>>>>>>> Stashed changes
     <Description>This package provides the freedom of ADO.NET connectivity to SqlServer, MySql and PostgreSql databases. Same methods but ability to change between databases.</Description>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <PackageReadmeFile>README.md</PackageReadmeFile>
