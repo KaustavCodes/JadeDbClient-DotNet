@@ -29,6 +29,18 @@ public interface IDatabaseService
     Task<IEnumerable<T>> ExecuteQueryAsync<T>(string query, IEnumerable<IDbDataParameter> parameters = null);
 
     /// <summary>
+    /// Executes a SQL query asynchronously and returns the first result object of type T.
+    /// </summary>
+    /// <typeparam name="T">The type of objects to which the query results will be mapped. The type T should have properties that match the column names in the query result.</typeparam>
+    /// <param name="query">The SQL query to be executed.</param>
+    /// <param name="parameters">A collection of parameters to be used in the SQL query. Default is null.</param>
+    /// <returns>A task representing the asynchronous operation. The task result contains a collection of objects of type T that represent the rows returned by the query.</returns>
+    /// <exception cref="NpgsqlException">Thrown when there is an error executing the query.</exception>
+    /// <exception cref="InvalidOperationException">Thrown when there is an error creating an instance of type T.</exception>
+    /// <exception cref="ArgumentException">Thrown when there is an error setting a property value.</exception>
+    Task<T?> ExecuteQueryFirstRowAsync<T>(string query, IEnumerable<IDbDataParameter> parameters = null);
+
+    /// <summary>
     /// Executes a query and returns a single value (scalar) result.
     /// </summary>
     /// <param name="query">The SQL query to be executed.</param>

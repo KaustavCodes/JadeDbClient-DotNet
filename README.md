@@ -157,6 +157,29 @@ string query = "SELECT * FROM tbl_test;";
 IEnumerable<DataModel> results = await _dbConfig.ExecuteQueryAsync<DataModel>(query);
 ```
 
+### ExecuteQueryFirstRowAsync: Execute a query and return the first row
+Executes a SQL query asynchronously and maps the first result row to an object of type T.
+Method Signature: **Task<T?> ExecuteQueryFirstRowAsync<T>(string query, IEnumerable<IDbDataParameter> parameters = null);**
+
+```
+//Execute a query and get the first row only
+string query = "SELECT * FROM tbl_test WHERE Id = @Id;";
+
+List<IDbDataParameter> dbDataParameters = new List<IDbDataParameter>();
+dbDataParameters.Add(_dbConfig.GetParameter("@Id", 1, DbType.Int32));
+
+DataModel? result = await _dbConfig.ExecuteQueryFirstRowAsync<DataModel>(query, dbDataParameters);
+if (result != null)
+{
+    // Use the result object
+    Console.WriteLine($"Name: {result.Name}");
+}
+else
+{
+    Console.WriteLine("No data found.");
+}
+```
+
 ### ExecuteScalar: Executes a query and returns a single data item
 Use this function to execute any query which returns a single vaule. eg: row count.
 Method Signature: **Task<T?> ExecuteScalar<T>(string query, IEnumerable<IDbDataParameter> parameters = null);**
