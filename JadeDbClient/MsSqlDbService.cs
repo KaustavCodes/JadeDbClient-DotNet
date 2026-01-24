@@ -203,14 +203,14 @@ public class MsSqlDbService : IDatabaseService
         }
     }
 
-    // <summary>
+    /// <summary>
     /// Executes a stored procedure asynchronously and maps the result to a collection of objects of type T.
     /// </summary>
     /// <typeparam name="T">The type of objects to which the stored procedure results will be mapped. The type T should have properties that match the column names in the result set.</typeparam>
     /// <param name="storedProcedureName">The name of the stored procedure to be executed.</param>
     /// <param name="parameters">A collection of parameters to be used in the stored procedure. Default is null.</param>
     /// <returns>A task representing the asynchronous operation. The task result contains a collection of objects of type T that represent the rows returned by the stored procedure.</returns>
-    /// <exception cref="SqlException">Thrown when there is an error executing the stored procedure.</exception>
+    /// <exception cref="Microsoft.Data.SqlClient.SqlException">Thrown when there is an error executing the stored procedure.</exception>
     /// <exception cref="InvalidOperationException">Thrown when there is an error creating an instance of type T.</exception>
     /// <exception cref="ArgumentException">Thrown when there is an error setting a property value.</exception>
     public async Task<IEnumerable<T>> ExecuteStoredProcedureSelectDataAsync<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicProperties | DynamicallyAccessedMemberTypes.PublicParameterlessConstructor)] T>(string storedProcedureName, IEnumerable<IDbDataParameter> parameters = null)

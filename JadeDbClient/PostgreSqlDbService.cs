@@ -200,7 +200,7 @@ public class PostgreSqlDbService : IDatabaseService
         }
     }
 
-    // <summary>
+    /// <summary>
     /// Executes a stored procedure asynchronously and maps the result to a collection of objects of type T.
     /// </summary>
     /// <typeparam name="T">The type of objects to which the stored procedure results will be mapped. The type T should have properties that match the column names in the result set.</typeparam>
