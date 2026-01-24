@@ -24,7 +24,7 @@ public interface IDatabaseService
     /// <param name="query">The SQL query to be executed.</param>
     /// <param name="parameters">A collection of parameters to be used in the SQL query. Default is null.</param>
     /// <returns>A task representing the asynchronous operation. The task result contains a collection of objects of type T that represent the rows returned by the query.</returns>
-    /// <exception cref="NpgsqlException">Thrown when there is an error executing the query.</exception>
+    /// <exception cref="System.Data.Common.DbException">Thrown when there is an error executing the query.</exception>
     /// <exception cref="InvalidOperationException">Thrown when there is an error creating an instance of type T.</exception>
     /// <exception cref="ArgumentException">Thrown when there is an error setting a property value.</exception>
     Task<IEnumerable<T>> ExecuteQueryAsync<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicProperties | DynamicallyAccessedMemberTypes.PublicParameterlessConstructor)] T>(string query, IEnumerable<IDbDataParameter> parameters = null);
@@ -36,7 +36,7 @@ public interface IDatabaseService
     /// <param name="query">The SQL query to be executed.</param>
     /// <param name="parameters">A collection of parameters to be used in the SQL query. Default is null.</param>
     /// <returns>A task representing the asynchronous operation. The task result contains a collection of objects of type T that represent the rows returned by the query.</returns>
-    /// <exception cref="NpgsqlException">Thrown when there is an error executing the query.</exception>
+    /// <exception cref="System.Data.Common.DbException">Thrown when there is an error executing the query.</exception>
     /// <exception cref="InvalidOperationException">Thrown when there is an error creating an instance of type T.</exception>
     /// <exception cref="ArgumentException">Thrown when there is an error setting a property value.</exception>
     Task<T?> ExecuteQueryFirstRowAsync<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicProperties | DynamicallyAccessedMemberTypes.PublicParameterlessConstructor)] T>(string query, IEnumerable<IDbDataParameter> parameters = null);
