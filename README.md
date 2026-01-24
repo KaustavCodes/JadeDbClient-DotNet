@@ -60,7 +60,7 @@ To do this we need to add the following to the web.config or appsettings.json fi
 ```
 "DatabaseType": "PostgreSQL",
 "ConnectionStrings": {
-    "DbConnection": "Host=localhost;Database=TestingDb;Username=[DB User Name];Password=[Db Password];SearchPath=JadedSoftwares;"
+    "DbConnection": "Host=localhost;Database=TestingDb;Username=[DB User Name];Password=[Db Password];SearchPath=KausCoder;"
 }
 ```
 
