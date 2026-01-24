@@ -5,6 +5,7 @@ using JadeDbClient.Interfaces;
 using Microsoft.Extensions.Configuration;
 using Npgsql;
 using System.Reflection;
+using System.Diagnostics.CodeAnalysis;
 
 namespace JadeDbClient;
 
@@ -70,7 +71,7 @@ public class PostgreSqlDbService : IDatabaseService
     /// <exception cref="NpgsqlException">Thrown when there is an error executing the query.</exception>
     /// <exception cref="InvalidOperationException">Thrown when there is an error creating an instance of type T.</exception>
     /// <exception cref="ArgumentException">Thrown when there is an error setting a property value.</exception>
-    public async Task<IEnumerable<T>> ExecuteQueryAsync<T>(string query, IEnumerable<IDbDataParameter> parameters = null)
+    public async Task<IEnumerable<T>> ExecuteQueryAsync<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicProperties | DynamicallyAccessedMemberTypes.PublicParameterlessConstructor)] T>(string query, IEnumerable<IDbDataParameter> parameters = null)
     {
         var results = new List<T>();
 
@@ -124,7 +125,7 @@ public class PostgreSqlDbService : IDatabaseService
     /// <exception cref="NpgsqlException">Thrown when there is an error executing the query.</exception>
     /// <exception cref="InvalidOperationException">Thrown when there is an error creating an instance of type T.</exception>
     /// <exception cref="ArgumentException">Thrown when there is an error setting a property value.</exception>
-    public async Task<T?> ExecuteQueryFirstRowAsync<T>(string query, IEnumerable<IDbDataParameter> parameters = null)
+    public async Task<T?> ExecuteQueryFirstRowAsync<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicProperties | DynamicallyAccessedMemberTypes.PublicParameterlessConstructor)] T>(string query, IEnumerable<IDbDataParameter> parameters = null)
     {
         using (var connection = new NpgsqlConnection(_connectionString))
         {
@@ -209,7 +210,7 @@ public class PostgreSqlDbService : IDatabaseService
     /// <exception cref="SqlException">Thrown when there is an error executing the stored procedure.</exception>
     /// <exception cref="InvalidOperationException">Thrown when there is an error creating an instance of type T.</exception>
     /// <exception cref="ArgumentException">Thrown when there is an error setting a property value.</exception>
-    public async Task<IEnumerable<T>> ExecuteStoredProcedureSelectDataAsync<T>(string storedProcedureName, IEnumerable<IDbDataParameter> parameters = null)
+    public async Task<IEnumerable<T>> ExecuteStoredProcedureSelectDataAsync<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicProperties | DynamicallyAccessedMemberTypes.PublicParameterlessConstructor)] T>(string storedProcedureName, IEnumerable<IDbDataParameter> parameters = null)
     {
         var results = new List<T>();
 
