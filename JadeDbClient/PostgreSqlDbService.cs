@@ -207,7 +207,7 @@ public class PostgreSqlDbService : IDatabaseService
     /// <param name="storedProcedureName">The name of the stored procedure to be executed.</param>
     /// <param name="parameters">A collection of parameters to be used in the stored procedure. Default is null.</param>
     /// <returns>A task representing the asynchronous operation. The task result contains a collection of objects of type T that represent the rows returned by the stored procedure.</returns>
-    /// <exception cref="SqlException">Thrown when there is an error executing the stored procedure.</exception>
+    /// <exception cref="Npgsql.NpgsqlException">Thrown when there is an error executing the stored procedure.</exception>
     /// <exception cref="InvalidOperationException">Thrown when there is an error creating an instance of type T.</exception>
     /// <exception cref="ArgumentException">Thrown when there is an error setting a property value.</exception>
     public async Task<IEnumerable<T>> ExecuteStoredProcedureSelectDataAsync<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicProperties | DynamicallyAccessedMemberTypes.PublicParameterlessConstructor)] T>(string storedProcedureName, IEnumerable<IDbDataParameter> parameters = null)
@@ -264,7 +264,7 @@ public class PostgreSqlDbService : IDatabaseService
     /// <param name="storedProcedureName">The name of the stored procedure to be executed.</param>
     /// <param name="parameters">A collection of parameters to be used in the stored procedure. Default is null.</param>
     /// <returns>The number of rows effected after executing the stored procedure.</returns>
-    /// <exception cref="SqlException">Thrown when there is an error executing the stored procedure.</exception>
+    /// <exception cref="Npgsql.NpgsqlException">Thrown when there is an error executing the stored procedure.</exception>
     public async Task<int> ExecuteStoredProcedureAsync(string storedProcedureName, IEnumerable<IDbDataParameter> parameters = null)
     {
         using (var connection = new NpgsqlConnection(_connectionString))
@@ -295,7 +295,7 @@ public class PostgreSqlDbService : IDatabaseService
     /// <param name="storedProcedureName">The name of the stored procedure to be executed.</param>
     /// <param name="parameters">A collection of parameters to be used in the stored procedure. This includes input, output, and input-output parameters.</param>
     /// <returns>A task representing the asynchronous operation. The task result contains a dictionary where the keys are the names of the output parameters and the values are their corresponding values.</returns>
-    /// <exception cref="SqlException">Thrown when there is an error executing the stored procedure.</exception>
+    /// <exception cref="Npgsql.NpgsqlException">Thrown when there is an error executing the stored procedure.</exception>
     public async Task<Dictionary<string, object>> ExecuteStoredProcedureWithOutputAsync(string storedProcedureName, IEnumerable<IDbDataParameter> parameters)
     {
         var outputValues = new Dictionary<string, object>();
