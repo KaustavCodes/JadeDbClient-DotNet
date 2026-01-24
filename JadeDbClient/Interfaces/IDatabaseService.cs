@@ -112,4 +112,29 @@ public interface IDatabaseService
     /// <param name="dataTable">The DataTable to insert.</param>
     /// <param name="tableName">The target PostgreSQL table name.</param>
     Task<bool> InsertDataTableWithJsonData(string tableName, DataTable dataTable);
+
+    /// <summary>
+    /// Begins a database transaction.
+    /// </summary>
+    /// <returns>An IDbTransaction object representing the new transaction.</returns>
+    IDbTransaction BeginTransaction();
+
+    /// <summary>
+    /// Begins a database transaction with the specified isolation level.
+    /// </summary>
+    /// <param name="isolationLevel">The isolation level for the transaction.</param>
+    /// <returns>An IDbTransaction object representing the new transaction.</returns>
+    IDbTransaction BeginTransaction(IsolationLevel isolationLevel);
+
+    /// <summary>
+    /// Commits the current database transaction.
+    /// </summary>
+    /// <param name="transaction">The transaction to commit.</param>
+    void CommitTransaction(IDbTransaction transaction);
+
+    /// <summary>
+    /// Rolls back the current database transaction.
+    /// </summary>
+    /// <param name="transaction">The transaction to roll back.</param>
+    void RollbackTransaction(IDbTransaction transaction);
 }

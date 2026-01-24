@@ -441,4 +441,57 @@ public class MsSqlDbService : IDatabaseService
     
         return true;
     }
+
+    /// <summary>
+    /// Begins a database transaction.
+    /// </summary>
+    /// <returns>An IDbTransaction object representing the new transaction.</returns>
+    public IDbTransaction BeginTransaction()
+    {
+        if (Connection == null || Connection.State != ConnectionState.Open)
+        {
+            OpenConnection();
+        }
+        return Connection.BeginTransaction();
+    }
+
+    /// <summary>
+    /// Begins a database transaction with the specified isolation level.
+    /// </summary>
+    /// <param name="isolationLevel">The isolation level for the transaction.</param>
+    /// <returns>An IDbTransaction object representing the new transaction.</returns>
+    public IDbTransaction BeginTransaction(IsolationLevel isolationLevel)
+    {
+        if (Connection == null || Connection.State != ConnectionState.Open)
+        {
+            OpenConnection();
+        }
+        return Connection.BeginTransaction(isolationLevel);
+    }
+
+    /// <summary>
+    /// Commits the current database transaction.
+    /// </summary>
+    /// <param name="transaction">The transaction to commit.</param>
+    public void CommitTransaction(IDbTransaction transaction)
+    {
+        if (transaction == null)
+        {
+            throw new ArgumentNullException(nameof(transaction));
+        }
+        transaction.Commit();
+    }
+
+    /// <summary>
+    /// Rolls back the current database transaction.
+    /// </summary>
+    /// <param name="transaction">The transaction to roll back.</param>
+    public void RollbackTransaction(IDbTransaction transaction)
+    {
+        if (transaction == null)
+        {
+            throw new ArgumentNullException(nameof(transaction));
+        }
+        transaction.Rollback();
+    }
 }
