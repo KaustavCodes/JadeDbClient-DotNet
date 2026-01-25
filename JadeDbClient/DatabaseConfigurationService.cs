@@ -14,13 +14,13 @@ public class DatabaseConfigurationService
     public string GetDatabaseType()
     {
         // Assuming there's a configuration key that specifies the database type
-        return _configuration["DatabaseType"];
+        return _configuration["DatabaseType"] ?? string.Empty;
     }
 
 
     public string GetLicenseType()
     {
         // Assuming there's a configuration key that specifies the database type
-        return _configuration["JadeDbLicense"];
+        return _configuration["JadeDbLicense"] ?? string.Empty;
     }
 }

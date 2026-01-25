@@ -5,7 +5,7 @@ namespace JadeDbClient.Interfaces;
 
 public interface IDatabaseService
 {
-    IDbConnection Connection { get; set; }
+    IDbConnection? Connection { get; set; }
 
     /// <summary>
     /// Open a connection to the database
@@ -27,7 +27,7 @@ public interface IDatabaseService
     /// <exception cref="System.Data.Common.DbException">Thrown when there is an error executing the query.</exception>
     /// <exception cref="InvalidOperationException">Thrown when there is an error creating an instance of type T.</exception>
     /// <exception cref="ArgumentException">Thrown when there is an error setting a property value.</exception>
-    Task<IEnumerable<T>> ExecuteQueryAsync<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicProperties | DynamicallyAccessedMemberTypes.PublicParameterlessConstructor)] T>(string query, IEnumerable<IDbDataParameter> parameters = null);
+    Task<IEnumerable<T>> ExecuteQueryAsync<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicProperties | DynamicallyAccessedMemberTypes.PublicParameterlessConstructor)] T>(string query, IEnumerable<IDbDataParameter>? parameters = null);
 
     /// <summary>
     /// Executes a SQL query asynchronously and returns the first result object of type T.
@@ -39,14 +39,14 @@ public interface IDatabaseService
     /// <exception cref="System.Data.Common.DbException">Thrown when there is an error executing the query.</exception>
     /// <exception cref="InvalidOperationException">Thrown when there is an error creating an instance of type T.</exception>
     /// <exception cref="ArgumentException">Thrown when there is an error setting a property value.</exception>
-    Task<T?> ExecuteQueryFirstRowAsync<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicProperties | DynamicallyAccessedMemberTypes.PublicParameterlessConstructor)] T>(string query, IEnumerable<IDbDataParameter> parameters = null);
+    Task<T?> ExecuteQueryFirstRowAsync<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicProperties | DynamicallyAccessedMemberTypes.PublicParameterlessConstructor)] T>(string query, IEnumerable<IDbDataParameter>? parameters = null);
 
     /// <summary>
     /// Executes a query and returns a single value (scalar) result.
     /// </summary>
     /// <param name="query">The SQL query to be executed.</param>
     /// <param name="parameters">>A collection of parameters to be used in the SQL query. Default is null.</param>
-    Task<T?> ExecuteScalar<T>(string query, IEnumerable<IDbDataParameter> parameters = null);
+    Task<T?> ExecuteScalar<T>(string query, IEnumerable<IDbDataParameter>? parameters = null);
 
     /// <summary>
     /// Executes a stored procedure asynchronously and returns the number of rows affected.
@@ -55,7 +55,7 @@ public interface IDatabaseService
     /// <param name="parameters">A collection of parameters to be used in the stored procedure. Default is null.</param>
     /// <returns>The number of rows effected after executing the stored procedure.</returns>
     /// <exception cref="SqlException">Thrown when there is an error executing the stored procedure.</exception>
-    Task<int> ExecuteStoredProcedureAsync(string storedProcedureName, IEnumerable<IDbDataParameter> parameters = null);
+    Task<int> ExecuteStoredProcedureAsync(string storedProcedureName, IEnumerable<IDbDataParameter>? parameters = null);
 
     /// <summary>
     /// Executes a stored procedure asynchronously and maps the result to a collection of objects of type T.
@@ -67,7 +67,7 @@ public interface IDatabaseService
     /// <exception cref="System.Data.Common.DbException">Thrown when there is an error executing the stored procedure.</exception>
     /// <exception cref="InvalidOperationException">Thrown when there is an error creating an instance of type T.</exception>
     /// <exception cref="ArgumentException">Thrown when there is an error setting a property value.</exception>
-    Task<IEnumerable<T>> ExecuteStoredProcedureSelectDataAsync<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicProperties | DynamicallyAccessedMemberTypes.PublicParameterlessConstructor)] T>(string storedProcedureName, IEnumerable<IDbDataParameter> parameters = null);
+    Task<IEnumerable<T>> ExecuteStoredProcedureSelectDataAsync<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicProperties | DynamicallyAccessedMemberTypes.PublicParameterlessConstructor)] T>(string storedProcedureName, IEnumerable<IDbDataParameter>? parameters = null);
 
     /// <summary>
     /// Executes a stored procedure asynchronously and retrieves the output parameters.
@@ -86,7 +86,7 @@ public interface IDatabaseService
     /// <param name="parameters">A collection of parameters to be used in the SQL command. Default is null.</param>
     /// <returns>A task representing the asynchronous operation.</returns>
     /// <exception cref="System.Data.Common.DbException">Thrown when there is an error executing the command.</exception>
-    Task ExecuteCommandAsync(string command, IEnumerable<IDbDataParameter> parameters = null);
+    Task ExecuteCommandAsync(string command, IEnumerable<IDbDataParameter>? parameters = null);
 
     /// <summary>
     /// Creates a new instance of an <see cref="IDbDataParameter"/> for your Database.

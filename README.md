@@ -5,7 +5,6 @@
 [![.NET 10](https://img.shields.io/badge/.NET-10-blue.svg)]([https://aka.ms/new-console-template](https://aka.ms/new-console-template))
 [![Nuget](https://img.shields.io/nuget/v/JadeDbClient.svg)](https://www.nuget.org/packages/JadeDbClient)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![AOT Compatible](https://img.shields.io/badge/AOT-Compatible-green.svg)](https://learn.microsoft.com/en-us/dotnet/core/deploying/native-aot/)
 
 **JadeDbClient** is a versatile and efficient .NET NuGet package designed to simplify database connections and query execution across multiple database systems: **MySQL**, **SQL Server**, and **PostgreSQL**. It provides common methods to execute queries and stored procedures, making database switching seamless and eliminating the hassle of managing different database clients.
 
@@ -16,7 +15,6 @@
 - **Stored Procedure Support**: Execute stored procedures across different databases without rewriting code.
 - **Transaction Support**: Full support for database transactions with commit and rollback capabilities across all database types.
 - **Consistent API**: Provides a unified API to eliminate the headaches of switching databases.
-- **Native AOT Compatible**: Fully compatible with .NET Native AOT compilation for faster startup times and smaller deployment sizes.
 
 ## Installation
 
@@ -346,54 +344,10 @@ JadeDbClient supports all standard isolation levels:
 
 Choose the appropriate isolation level based on your concurrency requirements and database system.
 
-## Native AOT Compatibility
 
-JadeDbClient is fully compatible with .NET Native AOT (Ahead-of-Time) compilation, which enables:
-- **Faster Startup Times**: Your application starts almost instantly
-- **Smaller Deployment Size**: Reduced memory footprint and disk space
-- **No JIT Compilation**: Everything is compiled ahead of time
-
-### Using JadeDbClient with Native AOT
-
-To use JadeDbClient in a Native AOT application, ensure your model classes follow these guidelines:
-
-1. **Public Parameterless Constructor**: Your model classes must have a public parameterless constructor (or rely on the default constructor).
-
-```csharp
-public class User
-{
-    public int Id { get; set; }
-    public string Name { get; set; } = string.Empty;
-    public DateTime CreatedDate { get; set; }
-    
-    // Default parameterless constructor works fine
-}
-```
-
-2. **Public Properties**: All properties that map to database columns must be public with both getter and setter.
-
-3. **Property Names Match Column Names**: Ensure property names match your database column names.
-
-### Example: Publishing with Native AOT
-
-Add the following to your project file (`.csproj`):
-
-```xml
-<PropertyGroup>
-  <PublishAot>true</PublishAot>
-</PropertyGroup>
-```
-
-Then publish your application:
-
-```bash
-dotnet publish -c Release
-```
-
-Your application will be compiled with Native AOT, and JadeDbClient will work seamlessly without any reflection warnings!
-
-### How It Works
-
-JadeDbClient uses the `DynamicallyAccessedMembers` attribute on all generic type parameters that require reflection. This tells the AOT compiler to preserve the necessary metadata for your model classes, ensuring everything works correctly at runtime.
+> **Note**  
+> JadeDbClient can be used in Native AOT applications for common ADO.NET-style
+> database access scenarios. Compatibility depends on the database provider
+> and host application configuration.
 
 Happy Coding! 

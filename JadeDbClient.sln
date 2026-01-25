@@ -5,9 +5,11 @@ VisualStudioVersion = 17.0.31903.59
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "JadeDbClient", "JadeDbClient\JadeDbClient.csproj", "{141F6B66-E19F-4772-AC46-7D0A548EAF80}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "WebTest", "WebTest\WebTest.csproj", "{9F907448-8EC3-49B8-9A07-882C3D2E1596}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "MvcApiTester", "MvcApiTester\MvcApiTester.csproj", "{9F907448-8EC3-49B8-9A07-882C3D2E1596}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "JadeDbClient.Tests", "JadeDbClient.Tests\JadeDbClient.Tests.csproj", "{CDD45D7C-75D9-4204-8E97-EF0F50BB8359}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ApiAotTester", "ApiAotTester\ApiAotTester.csproj", "{16683823-97C0-45DE-912A-DF69BDB0A95F}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -55,6 +57,18 @@ Global
 		{CDD45D7C-75D9-4204-8E97-EF0F50BB8359}.Release|x64.Build.0 = Release|Any CPU
 		{CDD45D7C-75D9-4204-8E97-EF0F50BB8359}.Release|x86.ActiveCfg = Release|Any CPU
 		{CDD45D7C-75D9-4204-8E97-EF0F50BB8359}.Release|x86.Build.0 = Release|Any CPU
+		{16683823-97C0-45DE-912A-DF69BDB0A95F}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{16683823-97C0-45DE-912A-DF69BDB0A95F}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{16683823-97C0-45DE-912A-DF69BDB0A95F}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{16683823-97C0-45DE-912A-DF69BDB0A95F}.Debug|x64.Build.0 = Debug|Any CPU
+		{16683823-97C0-45DE-912A-DF69BDB0A95F}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{16683823-97C0-45DE-912A-DF69BDB0A95F}.Debug|x86.Build.0 = Debug|Any CPU
+		{16683823-97C0-45DE-912A-DF69BDB0A95F}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{16683823-97C0-45DE-912A-DF69BDB0A95F}.Release|Any CPU.Build.0 = Release|Any CPU
+		{16683823-97C0-45DE-912A-DF69BDB0A95F}.Release|x64.ActiveCfg = Release|Any CPU
+		{16683823-97C0-45DE-912A-DF69BDB0A95F}.Release|x64.Build.0 = Release|Any CPU
+		{16683823-97C0-45DE-912A-DF69BDB0A95F}.Release|x86.ActiveCfg = Release|Any CPU
+		{16683823-97C0-45DE-912A-DF69BDB0A95F}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

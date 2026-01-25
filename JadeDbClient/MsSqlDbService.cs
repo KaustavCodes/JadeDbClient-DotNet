@@ -13,11 +13,12 @@ public class MsSqlDbService : IDatabaseService
 {
     private readonly string _connectionString;
 
-    public IDbConnection Connection { get; set; }
+    public IDbConnection? Connection { get; set; }
 
     public MsSqlDbService(IConfiguration configuration)
     {
-        _connectionString = configuration["ConnectionStrings:DbConnection"];
+        _connectionString = configuration["ConnectionStrings:DbConnection"] 
+            ?? throw new InvalidOperationException("Connection string 'ConnectionStrings:DbConnection' not found in configuration.");
     }
 
     /// <summary>
@@ -71,7 +72,7 @@ public class MsSqlDbService : IDatabaseService
     /// <exception cref="Microsoft.Data.SqlClient.SqlException">Thrown when there is an error executing the query.</exception>
     /// <exception cref="InvalidOperationException">Thrown when there is an error creating an instance of type T.</exception>
     /// <exception cref="ArgumentException">Thrown when there is an error setting a property value.</exception>
-    public async Task<IEnumerable<T>> ExecuteQueryAsync<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicProperties | DynamicallyAccessedMemberTypes.PublicParameterlessConstructor)] T>(string query, IEnumerable<IDbDataParameter> parameters = null)
+    public async Task<IEnumerable<T>> ExecuteQueryAsync<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicProperties | DynamicallyAccessedMemberTypes.PublicParameterlessConstructor)] T>(string query, IEnumerable<IDbDataParameter>? parameters = null)
     {
         var results = new List<T>();
 
@@ -90,9 +91,9 @@ public class MsSqlDbService : IDatabaseService
 
                 using (var reader = await command.ExecuteReaderAsync())
                 {
-                    DataTable schemaTable = reader.GetSchemaTable();
-                    var columnNames = schemaTable.Rows.Cast<DataRow>()
-                                        .Select(row => row["ColumnName"].ToString()).ToList();
+                    DataTable? schemaTable = reader.GetSchemaTable();
+                    var columnNames = schemaTable?.Rows.Cast<DataRow>()
+                                        .Select(row => row["ColumnName"].ToString()).ToList() ?? new List<string?>();
 
 
                     var properties = typeof(T).GetProperties();
@@ -127,7 +128,7 @@ public class MsSqlDbService : IDatabaseService
     /// <exception cref="Microsoft.Data.SqlClient.SqlException">Thrown when there is an error executing the query.</exception>
     /// <exception cref="InvalidOperationException">Thrown when there is an error creating an instance of type T.</exception>
     /// <exception cref="ArgumentException">Thrown when there is an error setting a property value.</exception>
-    public async Task<T?> ExecuteQueryFirstRowAsync<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicProperties | DynamicallyAccessedMemberTypes.PublicParameterlessConstructor)] T>(string query, IEnumerable<IDbDataParameter> parameters = null)
+    public async Task<T?> ExecuteQueryFirstRowAsync<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicProperties | DynamicallyAccessedMemberTypes.PublicParameterlessConstructor)] T>(string query, IEnumerable<IDbDataParameter>? parameters = null)
     {
         using (var connection = new SqlConnection(_connectionString))
         {
@@ -144,9 +145,9 @@ public class MsSqlDbService : IDatabaseService
 
                 using (var reader = await command.ExecuteReaderAsync())
                 {
-                    DataTable schemaTable = reader.GetSchemaTable();
-                    var columnNames = schemaTable.Rows.Cast<DataRow>()
-                                        .Select(row => row["ColumnName"].ToString()).ToList();
+                    DataTable? schemaTable = reader.GetSchemaTable();
+                    var columnNames = schemaTable?.Rows.Cast<DataRow>()
+                                        .Select(row => row["ColumnName"].ToString()).ToList() ?? new List<string?>();
 
                     var properties = typeof(T).GetProperties();
 
@@ -174,7 +175,7 @@ public class MsSqlDbService : IDatabaseService
     /// </summary>
     /// <param name="query">The SQL query to be executed.</param>
     /// <param name="parameters">>A collection of parameters to be used in the SQL query. Default is null.</param>
-    public async Task<T?> ExecuteScalar<T>(string query, IEnumerable<IDbDataParameter> parameters = null)
+    public async Task<T?> ExecuteScalar<T>(string query, IEnumerable<IDbDataParameter>? parameters = null)
     {
         using (var connection = new SqlConnection(_connectionString))
         {
@@ -213,7 +214,7 @@ public class MsSqlDbService : IDatabaseService
     /// <exception cref="Microsoft.Data.SqlClient.SqlException">Thrown when there is an error executing the stored procedure.</exception>
     /// <exception cref="InvalidOperationException">Thrown when there is an error creating an instance of type T.</exception>
     /// <exception cref="ArgumentException">Thrown when there is an error setting a property value.</exception>
-    public async Task<IEnumerable<T>> ExecuteStoredProcedureSelectDataAsync<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicProperties | DynamicallyAccessedMemberTypes.PublicParameterlessConstructor)] T>(string storedProcedureName, IEnumerable<IDbDataParameter> parameters = null)
+    public async Task<IEnumerable<T>> ExecuteStoredProcedureSelectDataAsync<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicProperties | DynamicallyAccessedMemberTypes.PublicParameterlessConstructor)] T>(string storedProcedureName, IEnumerable<IDbDataParameter>? parameters = null)
     {
         var results = new List<T>();
 
@@ -268,7 +269,7 @@ public class MsSqlDbService : IDatabaseService
     /// <param name="parameters">A collection of parameters to be used in the stored procedure. Default is null.</param>
     /// <returns>The number of rows effected after executing the stored procedure.</returns>
     /// <exception cref="SqlException">Thrown when there is an error executing the stored procedure.</exception>
-    public async Task<int> ExecuteStoredProcedureAsync(string storedProcedureName, IEnumerable<IDbDataParameter> parameters = null)
+    public async Task<int> ExecuteStoredProcedureAsync(string storedProcedureName, IEnumerable<IDbDataParameter>? parameters = null)
     {
         using (var connection = new SqlConnection(_connectionString))
         {
@@ -326,7 +327,7 @@ public class MsSqlDbService : IDatabaseService
                 {
                     if (parameter.Direction == ParameterDirection.Output || parameter.Direction == ParameterDirection.InputOutput)
                     {
-                        outputValues.Add(parameter.ParameterName, parameter.Value);
+                        outputValues.Add(parameter.ParameterName, parameter.Value ?? DBNull.Value);
                     }
                 }
             }
@@ -342,7 +343,7 @@ public class MsSqlDbService : IDatabaseService
     /// <param name="parameters">A collection of parameters to be used in the SQL command. Default is null.</param>
     /// <returns>A task representing the asynchronous operation.</returns>
     /// <exception cref="NpgsqlException">Thrown when there is an error executing the command.</exception>
-    public async Task ExecuteCommandAsync(string commandText, IEnumerable<IDbDataParameter> parameters = null)
+    public async Task ExecuteCommandAsync(string commandText, IEnumerable<IDbDataParameter>? parameters = null)
     {
         using (var connection = new SqlConnection(_connectionString))
         {
@@ -395,6 +396,9 @@ public class MsSqlDbService : IDatabaseService
     /// </summary>
     /// <param name="dataTable">The DataTable to insert.</param>
     /// <param name="tableName">The target SQL Server table name.</param>
+    /// <remarks>
+    /// Supports System.Text.Json types (JsonElement) and Newtonsoft.Json types (JObject) for backward compatibility.
+    /// </remarks>
     public async Task<bool> InsertDataTableWithJsonData(string tableName, DataTable dataTable)
     {
         // Clone the structure and copy data, serializing JSON objects as needed
@@ -412,7 +416,8 @@ public class MsSqlDbService : IDatabaseService
                 }
                 else if (item is Newtonsoft.Json.Linq.JObject jObj)
                 {
-                    newRow[i] = jObj.ToString(Newtonsoft.Json.Formatting.None);
+                    // Use parameterless ToString() for AOT compatibility (produces formatted JSON, still valid)
+                    newRow[i] = jObj.ToString();
                 }
                 else if (item is System.Text.Json.JsonElement jsonElement)
                 {
@@ -452,7 +457,7 @@ public class MsSqlDbService : IDatabaseService
         {
             OpenConnection();
         }
-        return Connection.BeginTransaction();
+        return Connection!.BeginTransaction();
     }
 
     /// <summary>
@@ -466,7 +471,7 @@ public class MsSqlDbService : IDatabaseService
         {
             OpenConnection();
         }
-        return Connection.BeginTransaction(isolationLevel);
+        return Connection!.BeginTransaction(isolationLevel);
     }
 
     /// <summary>
