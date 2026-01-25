@@ -1,53 +1,39 @@
 name: Build and Release
 
 on:
-  workflow_dispatch:   # Manual trigger only — you're in full control
+  workflow_dispatch:   # Manual trigger only
 
 jobs:
-  build-and-publish:
+  build:
     runs-on: ubuntu-latest
 
-    permissions:
-      contents: read
-      packages: write     # Required for GITHUB_TOKEN to publish packages
-
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0    # Optional: useful if you ever add git-based versioning later
+    - name: Checkout code
+      uses: actions/checkout@v3
 
-      - name: Setup .NET
-        uses: actions/setup-dotnet@v4
-        with:
-          dotnet-version: '10.0.x'
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v3
+      with:
+        dotnet-version: '9.x'
 
-      - name: Restore dependencies
-        run: dotnet restore
+    - name: Restore dependencies
+      run: dotnet restore JadeDbClient
 
-      - name: Build
-        run: dotnet build --configuration Release --no-restore
+    - name: Build
+      run: dotnet build --configuration Release --no-restore JadeDbClient
 
-      - name: Run tests
-        run: dotnet test --configuration Release --no-build --verbosity normal
+    - name: Run tests
+      run: dotnet test --no-restore --verbosity normal JadeDbClient
 
-      - name: Pack NuGet package
-        run: dotnet pack JadeDbClient --configuration Release --no-build -o ./nupkg
+    - name: Pack code for GitHub Packages
+      run: dotnet pack --configuration Release -o ./nupkg JadeDbClient
 
-      - name: Publish to GitHub Packages
-        if: success()
-        run: |
-          dotnet nuget push ./nupkg/*.nupkg \
-            --source https://nuget.pkg.github.com/KaustavCodes/index.json \
-            --api-key ${{ secrets.GITHUB_TOKEN }} \
-            --skip-duplicate
+    - name: Publish to GitHub Packages (PAT)
+      run: dotnet nuget push ./nupkg/*.nupkg \
+           -s https://nuget.pkg.github.com/KaustavCodes/index.json \
+           -k ${{ secrets.MY_GITHUB_TOKEN }}
 
-      - name: Publish to nuget.org (optional – comment out if not needed)
-        if: success()
-        env:
-          NUGET_API_KEY: ${{ secrets.NUGET_API_KEY }}
-        run: |
-          dotnet nuget push ./nupkg/*.nupkg \
-            --source https://api.nuget.org/v3/index.json \
-            --api-key $NUGET_API_KEY \
-            --skip-duplicate
+    - name: Publish to NuGet
+      run: dotnet nuget push ./nupkg/*.nupkg \
+           -k ${{ secrets.NUGET_API_KEY }} \
+           -s https://api.nuget.org/v3/index.json
