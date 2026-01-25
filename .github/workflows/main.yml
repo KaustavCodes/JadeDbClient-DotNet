@@ -1,9 +1,13 @@
 name: Build and Release
 
 on:
-  push:
-    branches:
-      - main
+  workflow_dispatch:
+    inputs:
+      branch:
+        description: 'Branch to deploy from'
+        required: true
+        default: 'main'
+        type: string
 
 jobs:
   build:
@@ -12,6 +16,8 @@ jobs:
     steps:
     - name: Checkout code
       uses: actions/checkout@v3
+      with:
+        ref: ${{ inputs.branch }}
 
     - name: Setup .NET
       uses: actions/setup-dotnet@v3
@@ -19,16 +25,16 @@ jobs:
         dotnet-version: '9.x'
 
     - name: Restore dependencies
-      run: dotnet restore JadeDbClient
+      run: dotnet restore
 
     - name: Build
-      run: dotnet build --configuration Release --no-restore JadeDbClient
+      run: dotnet build --configuration Release --no-restore
 
     - name: Run tests
-      run: dotnet test --no-restore --verbosity normal JadeDbClient
+      run: dotnet test --configuration Release --no-build --verbosity normal
 
     - name: Pack code for GitHub Packages
-      run: dotnet pack --configuration Release -o ./nupkg JadeDbClient
+      run: dotnet pack --configuration Release --no-build -o ./nupkg JadeDbClient
 
     - name: Publish to GitHub Packages
       run: dotnet nuget push ./nupkg/*.nupkg -s https://nuget.pkg.github.com/KaustavCodes/index.json -k ${{ secrets.MY_GITHUB_TOKEN }}

@@ -13,6 +13,7 @@
 - **Multi-database Support**: Effortlessly connect to MySQL, SQL Server, and PostgreSQL.
 - **Streamlined Query Execution**: Perform queries with ease using a common interface, regardless of the database system.
 - **Stored Procedure Support**: Execute stored procedures across different databases without rewriting code.
+- **Transaction Support**: Full support for database transactions with commit and rollback capabilities across all database types.
 - **Consistent API**: Provides a unified API to eliminate the headaches of switching databases.
 
 ## Installation
@@ -57,7 +58,7 @@ To do this we need to add the following to the web.config or appsettings.json fi
 ```
 "DatabaseType": "PostgreSQL",
 "ConnectionStrings": {
-    "DbConnection": "Host=localhost;Database=TestingDb;Username=[DB User Name];Password=[Db Password];SearchPath=JadedSoftwares;"
+    "DbConnection": "Host=localhost;Database=TestingDb;Username=[DB User Name];Password=[Db Password];SearchPath=KausCoder;"
 }
 ```
 
@@ -243,5 +244,110 @@ string tableName = "tbl_ToInsertInto"; //This will be the name of the table in t
 await _dbConfig.InsertDataTable(tableName, tbl);
 
 ```
+
+## Database Transactions
+
+JadeDbClient now supports database transactions across all three database types (SQL Server, MySQL, and PostgreSQL). Transactions allow you to group multiple database operations into a single atomic unit of work.
+
+### BeginTransaction: Start a database transaction
+Begins a new database transaction. The connection will be opened automatically if it's not already open.
+Method Signature: **IDbTransaction BeginTransaction();**
+
+```csharp
+// Begin a transaction
+IDbTransaction transaction = _dbConfig.BeginTransaction();
+```
+
+### BeginTransaction (with Isolation Level): Start a transaction with a specific isolation level
+Begins a new database transaction with the specified isolation level.
+Method Signature: **IDbTransaction BeginTransaction(IsolationLevel isolationLevel);**
+
+```csharp
+// Begin a transaction with ReadCommitted isolation level
+IDbTransaction transaction = _dbConfig.BeginTransaction(IsolationLevel.ReadCommitted);
+```
+
+### CommitTransaction: Commit a transaction
+Commits the current database transaction, making all changes permanent.
+Method Signature: **void CommitTransaction(IDbTransaction transaction);**
+
+```csharp
+// Commit the transaction
+_dbConfig.CommitTransaction(transaction);
+```
+
+### RollbackTransaction: Rollback a transaction
+Rolls back the current database transaction, undoing all changes made within the transaction.
+Method Signature: **void RollbackTransaction(IDbTransaction transaction);**
+
+```csharp
+// Rollback the transaction
+_dbConfig.RollbackTransaction(transaction);
+```
+
+### Complete Transaction Example
+
+Here's a complete example showing how to use transactions to ensure data consistency:
+
+```csharp
+IDbTransaction transaction = null;
+try
+{
+    // Begin transaction
+    transaction = _dbConfig.BeginTransaction();
+    
+    // Execute multiple operations within the transaction
+    string insertQuery1 = "INSERT INTO Orders(CustomerId, OrderDate) VALUES(@CustomerId, @OrderDate);";
+    List<IDbDataParameter> params1 = new List<IDbDataParameter>();
+    params1.Add(_dbConfig.GetParameter("@CustomerId", 1, DbType.Int32));
+    params1.Add(_dbConfig.GetParameter("@OrderDate", DateTime.Now, DbType.DateTime));
+    
+    await _dbConfig.ExecuteCommandAsync(insertQuery1, params1);
+    
+    string insertQuery2 = "INSERT INTO OrderItems(OrderId, ProductId, Quantity) VALUES(@OrderId, @ProductId, @Quantity);";
+    List<IDbDataParameter> params2 = new List<IDbDataParameter>();
+    params2.Add(_dbConfig.GetParameter("@OrderId", 1, DbType.Int32));
+    params2.Add(_dbConfig.GetParameter("@ProductId", 100, DbType.Int32));
+    params2.Add(_dbConfig.GetParameter("@Quantity", 5, DbType.Int32));
+    
+    await _dbConfig.ExecuteCommandAsync(insertQuery2, params2);
+    
+    // If all operations succeed, commit the transaction
+    _dbConfig.CommitTransaction(transaction);
+    Console.WriteLine("Transaction committed successfully.");
+}
+catch (Exception ex)
+{
+    // If any operation fails, rollback the transaction
+    if (transaction != null)
+    {
+        _dbConfig.RollbackTransaction(transaction);
+        Console.WriteLine("Transaction rolled back due to error: " + ex.Message);
+    }
+}
+finally
+{
+    // Clean up
+    transaction?.Dispose();
+    _dbConfig.CloseConnection();
+}
+```
+
+### Transaction Isolation Levels
+
+JadeDbClient supports all standard isolation levels:
+- `IsolationLevel.ReadUncommitted`
+- `IsolationLevel.ReadCommitted` (default for most databases)
+- `IsolationLevel.RepeatableRead`
+- `IsolationLevel.Serializable`
+- `IsolationLevel.Snapshot` (SQL Server only)
+
+Choose the appropriate isolation level based on your concurrency requirements and database system.
+
+
+> **Note**  
+> JadeDbClient can be used in Native AOT applications for common ADO.NET-style
+> database access scenarios. Compatibility depends on the database provider
+> and host application configuration.
 
 Happy Coding! 
