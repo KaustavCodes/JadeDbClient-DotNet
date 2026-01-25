@@ -10,6 +10,7 @@
     <Description>This package provides the freedom of ADO.NET connectivity to SqlServer, MySql and PostgreSql databases. Same methods but ability to change between databases.</Description>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <PackageReadmeFile>README.md</PackageReadmeFile>
+    <RepositoryUrl>https://github.com/KaustavCodes/JadeDbClient-DotNet</RepositoryUrl>
   </PropertyGroup>
 
   <ItemGroup>
