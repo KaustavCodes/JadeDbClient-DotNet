@@ -1,7 +1,9 @@
 using System.Data;
 using System.Collections.Generic;
+using System.Linq;
 using System.Threading.Tasks;
 using JadeDbClient.Interfaces;
+using JadeDbClient.Initialize;
 using Microsoft.Extensions.Configuration;
 using MySqlConnector;
 using System.Reflection;
@@ -12,13 +14,15 @@ namespace JadeDbClient;
 public class MySqlDbService : IDatabaseService
 {
     private readonly string _connectionString;
+    private readonly JadeMapperOptions _mapperOptions;
 
     public IDbConnection? Connection { get; set; }
 
-    public MySqlDbService(IConfiguration configuration)
+    public MySqlDbService(IConfiguration configuration, JadeMapperOptions mapperOptions)
     {
         _connectionString = configuration["ConnectionStrings:DbConnection"]
             ?? throw new InvalidOperationException("Connection string 'ConnectionStrings:DbConnection' not found in configuration.");
+        _mapperOptions = mapperOptions ?? throw new ArgumentNullException(nameof(mapperOptions));
     }
 
     /// <summary>
@@ -63,6 +67,55 @@ public class MySqlDbService : IDatabaseService
     }
 
     /// <summary>
+    /// Maps a data reader row to an object of type T using pre-compiled mapper or reflection fallback.
+    /// </summary>
+    private T MapObject<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicProperties | DynamicallyAccessedMemberTypes.PublicParameterlessConstructor)] T>(IDataReader reader)
+    {
+        // Try to use pre-compiled mapper first
+        if (_mapperOptions.TryGetMapper<T>(out var mapper))
+        {
+            return mapper!(reader);
+        }
+
+        // Fall back to reflection-based mapping
+        var properties = typeof(T).GetProperties();
+        T instance = Activator.CreateInstance<T>();
+
+        for (int i = 0; i < reader.FieldCount; i++)
+        {
+            var columnName = reader.GetName(i);
+            var property = properties.FirstOrDefault(p => p.Name == columnName);
+            
+            if (property != null && !reader.IsDBNull(i))
+            {
+                property.SetValue(instance, reader[i]);
+            }
+        }
+
+        return instance;
+    }
+
+    /// <summary>
+    /// Maps a DataRow to an object of type T using reflection fallback.
+    /// Note: Pre-compiled mappers work with IDataReader, not DataRow.
+    /// </summary>
+    private T MapObjectFromDataRow<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicProperties | DynamicallyAccessedMemberTypes.PublicParameterlessConstructor)] T>(DataRow row)
+    {
+        var properties = typeof(T).GetProperties();
+        T instance = Activator.CreateInstance<T>();
+
+        foreach (var property in properties)
+        {
+            if (row.Table.Columns.Contains(property.Name) && row[property.Name] != DBNull.Value)
+            {
+                property.SetValue(instance, row[property.Name]);
+            }
+        }
+
+        return instance;
+    }
+
+    /// <summary>
     /// Executes a SQL query asynchronously and maps the result to a collection of objects of type T.
     /// </summary>
     /// <typeparam name="T">The type of objects to which the query results will be mapped. The type T should have properties that match the column names in the query result.</typeparam>
@@ -91,26 +144,10 @@ public class MySqlDbService : IDatabaseService
 
                 using (var reader = await command.ExecuteReaderAsync())
                 {
-                    DataTable? schemaTable = reader.GetSchemaTable();
-                    var columnNames = schemaTable?.Rows.Cast<DataRow>()
-                                        .Select(row => row["ColumnName"].ToString()).ToList() ?? new List<string?>();
-
-
-                    var properties = typeof(T).GetProperties();
-
                     while (reader.Read())
                     {
-                        T instance = Activator.CreateInstance<T>();
-                        foreach (var property in properties)
-                        {
-                            if (columnNames.Contains(property.Name) && !reader.IsDBNull(reader.GetOrdinal(property.Name)))
-                            {
-                                property.SetValue(instance, reader[property.Name]);
-                            }
-                        }
-                        results.Add(instance);
+                        results.Add(MapObject<T>(reader));
                     }
-
                 }
             }
         }
@@ -145,23 +182,9 @@ public class MySqlDbService : IDatabaseService
 
                 using (var reader = await command.ExecuteReaderAsync())
                 {
-                    DataTable? schemaTable = reader.GetSchemaTable();
-                    var columnNames = schemaTable?.Rows.Cast<DataRow>()
-                                        .Select(row => row["ColumnName"].ToString()).ToList() ?? new List<string?>();
-
-                    var properties = typeof(T).GetProperties();
-
                     if (reader.Read())
                     {
-                        T instance = Activator.CreateInstance<T>();
-                        foreach (var property in properties)
-                        {
-                            if (columnNames.Contains(property.Name) && !reader.IsDBNull(reader.GetOrdinal(property.Name)))
-                            {
-                                property.SetValue(instance, reader[property.Name]);
-                            }
-                        }
-                        return instance;
+                        return MapObject<T>(reader);
                     }
                 }
             }
@@ -238,22 +261,9 @@ public class MySqlDbService : IDatabaseService
                     var dataTable = new DataTable();
                     adapter.Fill(dataTable);
 
-                    var columnNames = dataTable.Columns.Cast<DataColumn>()
-                                        .Select(column => column.ColumnName).ToList();
-
-                    var properties = typeof(T).GetProperties();
-
                     foreach (DataRow row in dataTable.Rows)
                     {
-                        T instance = Activator.CreateInstance<T>();
-                        foreach (var property in properties)
-                        {
-                            if (columnNames.Contains(property.Name) && row[property.Name] != DBNull.Value)
-                            {
-                                property.SetValue(instance, row[property.Name]);
-                            }
-                        }
-                        results.Add(instance);
+                        results.Add(MapObjectFromDataRow<T>(row));
                     }
                 }
             }
