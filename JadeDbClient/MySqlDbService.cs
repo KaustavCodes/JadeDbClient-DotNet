@@ -79,14 +79,14 @@ public class MySqlDbService : IDatabaseService
 
         // Fall back to reflection-based mapping
         var properties = typeof(T).GetProperties();
+        var propertyDict = properties.ToDictionary(p => p.Name, StringComparer.OrdinalIgnoreCase);
         T instance = Activator.CreateInstance<T>();
 
         for (int i = 0; i < reader.FieldCount; i++)
         {
             var columnName = reader.GetName(i);
-            var property = properties.FirstOrDefault(p => p.Name == columnName);
             
-            if (property != null && !reader.IsDBNull(i))
+            if (propertyDict.TryGetValue(columnName, out var property) && !reader.IsDBNull(i))
             {
                 property.SetValue(instance, reader[i]);
             }
