@@ -74,15 +74,36 @@ We need these 2 lines
 using JadeDbClient.Initialize;
 ```
 
-Initialize the plugin
-```
+### Basic Initialization (Standard Approach)
+
+Initialize the plugin without any custom configuration. The library will use reflection-based mapping automatically:
+
+```csharp
 // Call the method to add the database service
 builder.Services.AddJadeDbService();
 ```
 
-### Optional: Configure AOT-Compatible Mappers
+**This is the standard approach that works for all .NET applications. Your existing code will continue to work without any changes.**
 
-For .NET Native AOT applications, you can register pre-compiled mappers to avoid reflection overhead. The library automatically falls back to reflection for types without registered mappers, ensuring backward compatibility.
+### Advanced: AOT-Compatible Mappers (Optional)
+
+> **New Feature** 🎉  
+> For .NET Native AOT applications or performance-critical scenarios, you can now register pre-compiled mappers to avoid reflection overhead.
+
+#### Why Use Pre-compiled Mappers?
+
+**Use pre-compiled mappers when:**
+- ✅ Building Native AOT applications (required for AOT compatibility)
+- ✅ Performance is critical (eliminates reflection overhead)
+- ✅ You want compile-time type safety for your mappings
+- ✅ Working with frequently-queried models
+
+**Stick with automatic reflection when:**
+- ✅ Building standard .NET applications (easier, less code)
+- ✅ Working with dynamic or rarely-used models
+- ✅ Rapid prototyping and development
+
+#### How to Configure AOT Mappers
 
 ```csharp
 builder.Services.AddJadeDbService(options =>
@@ -106,11 +127,55 @@ builder.Services.AddJadeDbService(options =>
 });
 ```
 
+#### Important Notes
+
+- 🔄 **Backward Compatible**: Types without registered mappers automatically use reflection
+- 🚀 **Performance**: Pre-compiled mappers are faster than reflection
+- 🎯 **Selective Registration**: Only register mappers for models you need - others use reflection automatically
+- 📝 **Column Mapping**: Use column indices (GetInt32(0), GetString(1)) or column names (reader["ColumnName"])
+
+#### Complete Example with AOT Mappers
+
+```csharp
+using JadeDbClient.Initialize;
+
+var builder = WebApplication.CreateBuilder(args);
+
+// Register database service with custom mappers
+builder.Services.AddJadeDbService(options =>
+{
+    // Register mapper for frequently-used User model
+    options.RegisterMapper<User>(reader => new User
+    {
+        UserId = reader.GetInt32(reader.GetOrdinal("UserId")),
+        Username = reader.GetString(reader.GetOrdinal("Username")),
+        Email = reader.GetString(reader.GetOrdinal("Email")),
+        IsActive = reader.GetBoolean(reader.GetOrdinal("IsActive")),
+        CreatedAt = reader.GetDateTime(reader.GetOrdinal("CreatedAt"))
+    });
+    
+    // Register mapper for Order model  
+    options.RegisterMapper<Order>(reader => new Order
+    {
+        OrderId = reader.GetInt32(reader.GetOrdinal("OrderId")),
+        OrderDate = reader.GetDateTime(reader.GetOrdinal("OrderDate")),
+        TotalAmount = reader.GetDecimal(reader.GetOrdinal("TotalAmount")),
+        Status = reader.GetString(reader.GetOrdinal("Status"))
+    });
+    
+    // Note: Models without registered mappers (like Product, Category, etc.)
+    // will automatically use reflection-based mapping
+});
+
+var app = builder.Build();
+```
+
 **Benefits of Pre-compiled Mappers:**
 - ✅ Full .NET Native AOT compatibility
 - ✅ Better performance (no reflection overhead)
 - ✅ Compile-time type safety
 - ✅ Optional - existing code works without changes
+- ✅ Mix and match - use mappers for some types, reflection for others
 
 That's it for the setup part
 
@@ -143,7 +208,31 @@ public class HomeController : Controller
 That's it. We are all ready to start making requests to the databse.
 
 
-## How to inteact with the database
+## How to interact with the database
+
+### Understanding Automatic Mapping
+
+**Good News!** 🎉 You don't need to do anything special to use the database methods. The library handles mapping automatically:
+
+- **With pre-compiled mappers registered**: Uses your fast, AOT-compatible mapper
+- **Without pre-compiled mappers**: Automatically uses reflection-based mapping
+
+**Both approaches work seamlessly with the same API calls!**
+
+#### Example: Same Code, Different Mapping Approaches
+
+```csharp
+// This code works identically whether you registered a mapper or not!
+IEnumerable<UserModel> users = await _dbConfig.ExecuteQueryAsync<UserModel>("SELECT * FROM Users");
+
+// If you registered a mapper for UserModel:
+//   -> Uses fast pre-compiled mapper
+
+// If you didn't register a mapper for UserModel:
+//   -> Automatically uses reflection (still works!)
+```
+
+### All Database Methods
 
 ### GetParameter: Created database parameters that you send to databse
 Creates a new instance of an <see cref="IDbDataParameter"/> for your Database.
@@ -376,6 +465,207 @@ JadeDbClient supports all standard isolation levels:
 - `IsolationLevel.Snapshot` (SQL Server only)
 
 Choose the appropriate isolation level based on your concurrency requirements and database system.
+
+## Complete Real-World Example
+
+Here's a complete example showing how to use JadeDbClient in a real application, with both standard and AOT-optimized approaches:
+
+### Scenario: E-commerce Order Management
+
+#### Step 1: Setup (Program.cs)
+
+```csharp
+using JadeDbClient.Initialize;
+
+var builder = WebApplication.CreateBuilder(args);
+
+// Option A: Standard approach (uses reflection for all models)
+builder.Services.AddJadeDbService();
+
+// Option B: AOT-optimized approach (pre-compile frequently-used models)
+/*
+builder.Services.AddJadeDbService(options =>
+{
+    // Register mappers only for frequently-queried models
+    options.RegisterMapper<Order>(reader => new Order
+    {
+        OrderId = reader.GetInt32(reader.GetOrdinal("OrderId")),
+        CustomerId = reader.GetInt32(reader.GetOrdinal("CustomerId")),
+        OrderDate = reader.GetDateTime(reader.GetOrdinal("OrderDate")),
+        TotalAmount = reader.GetDecimal(reader.GetOrdinal("TotalAmount")),
+        Status = reader.GetString(reader.GetOrdinal("Status"))
+    });
+    
+    options.RegisterMapper<Customer>(reader => new Customer
+    {
+        CustomerId = reader.GetInt32(reader.GetOrdinal("CustomerId")),
+        Name = reader.GetString(reader.GetOrdinal("Name")),
+        Email = reader.GetString(reader.GetOrdinal("Email"))
+    });
+    
+    // Note: Product model will use automatic reflection mapping
+});
+*/
+
+var app = builder.Build();
+app.Run();
+```
+
+#### Step 2: Using in Your Service/Controller
+
+```csharp
+using System.Data;
+using JadeDbClient.Interfaces;
+
+public class OrderService
+{
+    private readonly IDatabaseService _dbConfig;
+    
+    public OrderService(IDatabaseService dbConfig)
+    {
+        _dbConfig = dbConfig;
+    }
+    
+    // Get all orders (works with or without registered mapper!)
+    public async Task<IEnumerable<Order>> GetAllOrdersAsync()
+    {
+        string query = "SELECT * FROM Orders WHERE Status = @Status";
+        
+        var parameters = new List<IDbDataParameter>
+        {
+            _dbConfig.GetParameter("@Status", "Active", DbType.String)
+        };
+        
+        // If Order mapper is registered -> uses pre-compiled mapper
+        // If not registered -> uses automatic reflection
+        return await _dbConfig.ExecuteQueryAsync<Order>(query, parameters);
+    }
+    
+    // Get customer details (works with or without registered mapper!)
+    public async Task<Customer?> GetCustomerAsync(int customerId)
+    {
+        string query = "SELECT * FROM Customers WHERE CustomerId = @Id";
+        
+        var parameters = new List<IDbDataParameter>
+        {
+            _dbConfig.GetParameter("@Id", customerId, DbType.Int32)
+        };
+        
+        return await _dbConfig.ExecuteQueryFirstRowAsync<Customer>(query, parameters);
+    }
+    
+    // Get products (automatically uses reflection since no mapper registered)
+    public async Task<IEnumerable<Product>> GetProductsAsync()
+    {
+        string query = "SELECT * FROM Products";
+        
+        // Product doesn't have a registered mapper, so it uses reflection
+        // This is perfectly fine for less frequently-queried models!
+        return await _dbConfig.ExecuteQueryAsync<Product>(query);
+    }
+    
+    // Create order with transaction
+    public async Task<bool> CreateOrderAsync(Order order, List<OrderItem> items)
+    {
+        IDbTransaction? transaction = null;
+        try
+        {
+            transaction = _dbConfig.BeginTransaction();
+            
+            // Insert order
+            string insertOrderQuery = @"
+                INSERT INTO Orders (CustomerId, OrderDate, TotalAmount, Status) 
+                VALUES (@CustomerId, @OrderDate, @TotalAmount, @Status);
+                SELECT CAST(SCOPE_IDENTITY() AS INT);";
+            
+            var orderParams = new List<IDbDataParameter>
+            {
+                _dbConfig.GetParameter("@CustomerId", order.CustomerId, DbType.Int32),
+                _dbConfig.GetParameter("@OrderDate", order.OrderDate, DbType.DateTime),
+                _dbConfig.GetParameter("@TotalAmount", order.TotalAmount, DbType.Decimal),
+                _dbConfig.GetParameter("@Status", order.Status, DbType.String)
+            };
+            
+            int orderId = await _dbConfig.ExecuteScalar<int>(insertOrderQuery, orderParams);
+            
+            // Insert order items
+            foreach (var item in items)
+            {
+                string insertItemQuery = @"
+                    INSERT INTO OrderItems (OrderId, ProductId, Quantity, Price) 
+                    VALUES (@OrderId, @ProductId, @Quantity, @Price)";
+                
+                var itemParams = new List<IDbDataParameter>
+                {
+                    _dbConfig.GetParameter("@OrderId", orderId, DbType.Int32),
+                    _dbConfig.GetParameter("@ProductId", item.ProductId, DbType.Int32),
+                    _dbConfig.GetParameter("@Quantity", item.Quantity, DbType.Int32),
+                    _dbConfig.GetParameter("@Price", item.Price, DbType.Decimal)
+                };
+                
+                await _dbConfig.ExecuteCommandAsync(insertItemQuery, itemParams);
+            }
+            
+            _dbConfig.CommitTransaction(transaction);
+            return true;
+        }
+        catch (Exception)
+        {
+            transaction?.Rollback();
+            throw;
+        }
+        finally
+        {
+            transaction?.Dispose();
+            _dbConfig.CloseConnection();
+        }
+    }
+}
+```
+
+#### Step 3: Model Classes
+
+```csharp
+// These models work with or without registered mappers!
+public class Order
+{
+    public int OrderId { get; set; }
+    public int CustomerId { get; set; }
+    public DateTime OrderDate { get; set; }
+    public decimal TotalAmount { get; set; }
+    public string Status { get; set; } = string.Empty;
+}
+
+public class Customer
+{
+    public int CustomerId { get; set; }
+    public string Name { get; set; } = string.Empty;
+    public string Email { get; set; } = string.Empty;
+}
+
+public class Product
+{
+    public int ProductId { get; set; }
+    public string ProductName { get; set; } = string.Empty;
+    public decimal Price { get; set; }
+}
+
+public class OrderItem
+{
+    public int OrderItemId { get; set; }
+    public int OrderId { get; set; }
+    public int ProductId { get; set; }
+    public int Quantity { get; set; }
+    public decimal Price { get; set; }
+}
+```
+
+### Key Takeaways
+
+1. **Your code doesn't change** whether you use pre-compiled mappers or not
+2. **Mix and match**: Register mappers for performance-critical models, use reflection for others
+3. **Start simple**: Begin with standard reflection, add pre-compiled mappers only when needed
+4. **All features work**: Transactions, stored procedures, queries - everything works with both approaches
 
 
 > **Note**  
