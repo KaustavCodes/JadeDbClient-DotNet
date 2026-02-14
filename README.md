@@ -14,6 +14,7 @@
 - **Streamlined Query Execution**: Perform queries with ease using a common interface, regardless of the database system.
 - **Stored Procedure Support**: Execute stored procedures across different databases without rewriting code.
 - **Transaction Support**: Full support for database transactions with commit and rollback capabilities across all database types.
+- **Native AOT Support**: Pre-compiled mapper registry for .NET Native AOT compatibility with automatic reflection fallback.
 - **Consistent API**: Provides a unified API to eliminate the headaches of switching databases.
 
 ## Installation
@@ -78,6 +79,38 @@ Initialize the plugin
 // Call the method to add the database service
 builder.Services.AddJadeDbService();
 ```
+
+### Optional: Configure AOT-Compatible Mappers
+
+For .NET Native AOT applications, you can register pre-compiled mappers to avoid reflection overhead. The library automatically falls back to reflection for types without registered mappers, ensuring backward compatibility.
+
+```csharp
+builder.Services.AddJadeDbService(options =>
+{
+    // Register a pre-compiled mapper for a model
+    options.RegisterMapper<UserModel>(reader => new UserModel
+    {
+        Id = reader.GetInt32(0),
+        Name = reader.GetString(1),
+        Email = reader.GetString(2),
+        CreatedDate = reader.GetDateTime(3)
+    });
+
+    // Register additional mappers as needed
+    options.RegisterMapper<ProductModel>(reader => new ProductModel
+    {
+        ProductId = reader.GetInt32(0),
+        ProductName = reader.GetString(1),
+        Price = reader.GetDecimal(2)
+    });
+});
+```
+
+**Benefits of Pre-compiled Mappers:**
+- ✅ Full .NET Native AOT compatibility
+- ✅ Better performance (no reflection overhead)
+- ✅ Compile-time type safety
+- ✅ Optional - existing code works without changes
 
 That's it for the setup part
 
