@@ -8,8 +8,11 @@ namespace JadeDbClient.Initialize;
 
 public static class JadeDbServiceRegistration
 {
-    public static void AddJadeDbService(this IServiceCollection services)
+    public static void AddJadeDbService(this IServiceCollection services, Action<JadeMapperOptions>? configure = null)
     {
+        var options = new JadeMapperOptions();
+        configure?.Invoke(options);
+
         // Setup the database
         services.AddSingleton<DatabaseConfigurationService>();
 
