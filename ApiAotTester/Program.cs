@@ -98,7 +98,8 @@ app.MapGet("/test-aot-mapper", async (IDatabaseService dbConfig) =>
 {
     // This uses DataModel which has a pre-compiled mapper registered
     // Should use the fast, AOT-compatible mapper
-    string query = "SELECT * FROM public.tbl_test LIMIT 10;";
+    // Using TOP for SQL Server compatibility (works in MsSql, ignored in PostgreSQL/MySQL)
+    string query = "SELECT TOP 10 * FROM tbl_test;";
     IEnumerable<DataModel> results = await dbConfig.ExecuteQueryAsync<DataModel>(query);
     
     return Results.Ok(new 
@@ -114,7 +115,7 @@ app.MapGet("/test-aot-reflection", async (IDatabaseService dbConfig) =>
 {
     // This uses UserModel which does NOT have a pre-compiled mapper
     // Should automatically fall back to reflection-based mapping
-    string query = "SELECT id as UserId, name as UserName FROM public.tbl_test LIMIT 10;";
+    string query = "SELECT TOP 10 id as UserId, name as UserName FROM tbl_test;";
     IEnumerable<UserModel> results = await dbConfig.ExecuteQueryAsync<UserModel>(query);
     
     return Results.Ok(new 
@@ -129,11 +130,11 @@ app.MapGet("/test-aot-reflection", async (IDatabaseService dbConfig) =>
 app.MapGet("/test-aot-mixed", async (IDatabaseService dbConfig) =>
 {
     // First query uses pre-compiled mapper
-    string query1 = "SELECT * FROM public.tbl_test LIMIT 5;";
+    string query1 = "SELECT TOP 5 * FROM tbl_test;";
     IEnumerable<DataModel> dataResults = await dbConfig.ExecuteQueryAsync<DataModel>(query1);
     
     // Second query uses reflection fallback
-    string query2 = "SELECT id as UserId, name as UserName FROM public.tbl_test LIMIT 5;";
+    string query2 = "SELECT TOP 5 id as UserId, name as UserName FROM tbl_test;";
     IEnumerable<UserModel> userResults = await dbConfig.ExecuteQueryAsync<UserModel>(query2);
     
     return Results.Ok(new 
