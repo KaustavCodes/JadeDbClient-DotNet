@@ -25,6 +25,28 @@ public class JadeDbMapperOptions
         Mappers[typeof(T)] = (reader) => mapper(reader);
     }
 
+    // Public method for testing - checks if mapper exists
+    public bool HasMapper<T>()
+    {
+        return Mappers.ContainsKey(typeof(T));
+    }
+
+    // Public method for testing - executes mapper if it exists
+    public T? ExecuteMapper<T>(IDataReader reader) where T : class
+    {
+        if (TryGetMapper<T>(out var mapper) && mapper != null)
+        {
+            return mapper(reader);
+        }
+        return null;
+    }
+
+    // Public method for testing - allows registering in GlobalMappers (simulating Source Generator)
+    public static void RegisterGlobalMapper<T>(Func<IDataReader, T> mapper) where T : class
+    {
+        GlobalMappers[typeof(T)] = (reader) => mapper(reader);
+    }
+
     internal bool TryGetMapper<T>(out Func<IDataReader, T>? mapper)
     {
         if (Mappers.TryGetValue(typeof(T), out var func))
