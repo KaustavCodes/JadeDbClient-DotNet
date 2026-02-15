@@ -13,7 +13,7 @@ public class JadeDbMapperOptions
 
     public JadeDbMapperOptions()
     {
-        // 🚀 Pull globally generated mappers into this instance automatically
+        // Pull globally generated mappers into this instance automatically
         foreach (var mapper in GlobalMappers)
         {
             Mappers[mapper.Key] = mapper.Value;
