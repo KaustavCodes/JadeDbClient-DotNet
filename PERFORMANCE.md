@@ -2,6 +2,8 @@
 
 ## 📊 Executive Summary
 
+**Performance review conducted using GitHub Copilot AI.**
+
 JadeDbClient offers **three mapping approaches**, each with distinct performance characteristics and use cases:
 
 | Approach | Performance | Ease of Use | Future-Proof | Best For |
