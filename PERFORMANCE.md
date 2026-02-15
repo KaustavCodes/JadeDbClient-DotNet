@@ -188,13 +188,13 @@ Total: ~150 MB
 
 ### Native AOT Compatibility
 
-| Approach | AOT Compatible | Trimming Safe | Publish Size |
+| Approach | AOT Status | Trimming Safe | Publish Size |
 |----------|----------------|---------------|--------------|
-| **Source Generator** | ✅ **Yes*** | ✅ **Yes** | **Smallest** |
-| **Manual Registration** | ✅ **Yes*** | ✅ **Yes** | **Small** |
-| **Reflection** | ⚠️ **Limited** | ❌ **No** | **Largest** |
+| **Source Generator** | ✅ **Tested*** | ✅ **Yes** | **Smallest** |
+| **Manual Registration** | ✅ **Tested*** | ✅ **Yes** | **Small** |
+| **Reflection** | ❌ **No** | ❌ **No** | **Largest** |
 
-**\*Important Note**: JadeDbClient's mapping logic is fully AOT-compatible when using Source Generator or Manual Registration. However, the underlying database driver packages (`Microsoft.Data.SqlClient`, `MySqlConnector`, `Npgsql`) may produce AOT warnings (e.g., `IL2104`, `IL3053`) during publish. These warnings are expected and originate from the drivers themselves, not JadeDbClient. Your application will still compile and run, but you should test thoroughly.
+**\*Testing Results**: In our testing, JadeDbClient worked with .NET Native AOT for SQL Server, MySQL, and PostgreSQL. However, database driver packages produce expected AOT warnings (e.g., `IL2104`, `IL3053`). **Thorough testing is non-negotiable** due to the aggressive trimming nature of .NET Native AOT - test every functionality before production deployment.
 
 ### AOT Performance Benefits
 
@@ -207,13 +207,13 @@ When publishing with Native AOT (`dotnet publish -c Release -r linux-x64`):
 - ✅ **Predictable performance** (no tiered compilation)
 - ✅ **Works in restricted environments** (iOS, WASM, embedded)
 
-**Expected Warnings**: During AOT publish, you may see trim/AOT warnings from database drivers. This is normal and expected:
+**Expected Warnings**: During AOT publish, you will see trim/AOT warnings from database drivers:
 ```
 warning IL2104: Assembly 'Microsoft.Data.SqlClient' produced trim warnings
 warning IL3053: Assembly 'Microsoft.Data.SqlClient' produced AOT analysis warnings
 warning IL2104: Assembly 'MySqlConnector' produced trim warnings
 ```
-These warnings come from the database drivers, not JadeDbClient. Your application will still compile and run correctly.
+These warnings come from the database drivers. **Testing is mandatory** - the aggressive trimming may cause unexpected behaviors if not properly tested.
 
 **Example Publish Sizes** (Simple API):
 - With Source Generator: **~8-12 MB**
@@ -314,7 +314,7 @@ options.RegisterMapper<User>(reader => new User
 
 **Cons**:
 - ❌ **Performance Cost**: 5-10x slower than pre-compiled
-- ❌ **Not AOT Compatible**: Doesn't work well with Native AOT
+- ❌ **Not for AOT**: Use standard JIT builds, not Native AOT
 - ❌ **Runtime Errors**: Issues only discovered when code runs
 - ❌ **Naming Conventions**: Must match database column names exactly
 
@@ -336,11 +336,11 @@ public class User { ... }
 
 | Approach | .NET 8-10 | .NET 11+ | Native AOT* | WASM | Mobile |
 |----------|-----------|----------|------------|------|--------|
-| **Source Generator** | ✅ Full | ✅ Full | ✅ Ready* | ✅ Ready* | ✅ Ready* |
-| **Manual** | ✅ Full | ✅ Full | ✅ Ready* | ✅ Ready* | ✅ Ready* |
-| **Reflection** | ✅ Full | ⚠️ Limited | ❌ Poor | ❌ Poor | ⚠️ Limited |
+| **Source Generator** | ✅ Full | ✅ Full | ⚠️ Tested* | ⚠️ Tested* | ⚠️ Tested* |
+| **Manual** | ✅ Full | ✅ Full | ⚠️ Tested* | ⚠️ Tested* | ⚠️ Tested* |
+| **Reflection** | ✅ Full | ⚠️ Limited | ❌ No | ❌ No | ⚠️ Limited |
 
-**\*AOT/WASM/Mobile Note**: JadeDbClient is AOT-ready, but database driver compatibility varies. Expect warnings from providers during AOT publish. Test your specific scenario thoroughly.
+**\*AOT/WASM/Mobile Status**: Works in our testing with SQL Server, MySQL, PostgreSQL. Database drivers produce warnings. **Thorough testing is mandatory** due to aggressive trimming - test every functionality before production use.
 
 ### Technology Trends
 
@@ -432,7 +432,7 @@ public class User { ... }
 - Smaller images = faster deployments, less registry storage
 - Faster cold starts = better auto-scaling responsiveness
 
-**Note on AOT Warnings**: When publishing with Native AOT, expect trim/AOT warnings from database provider packages. These warnings are normal and don't prevent deployment. However, always test your specific use case in a staging environment before production deployment.
+**Note on AOT**: When publishing with Native AOT, expect trim/AOT warnings from database provider packages. In our testing, it worked with SQL Server, MySQL, PostgreSQL. **However, thorough testing is non-negotiable** - the aggressive trimming nature of .NET AOT requires you to test every functionality in a staging environment before production deployment.
 
 ---
 

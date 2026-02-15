@@ -148,16 +148,16 @@ var app = builder.Build();
 
 **Advantages of `[JadeDbObject]`:**
 - ✅ **Zero Boilerplate**: No manual mapper registration needed
-- ✅ **Full .NET Native AOT Compatibility**: Mappers generated at compile-time
+- ✅ **.NET Native AOT Support**: Mappers generated at compile-time (works in our testing with trimming warnings)
 - ✅ **Better Performance**: No reflection overhead
 - ✅ **Compile-Time Type Safety**: Errors caught during compilation
 - ✅ **Automatic Null Handling**: Supports nullable types (`int?`, `DateTime?`, `string?`)
 - ✅ **Auto-Registration**: Uses `[ModuleInitializer]` for zero-config setup
 
 **When to use each approach:**
-- ✅ **Use `[JadeDbObject]`**: For all your own models (recommended)
+- ✅ **Use `[JadeDbObject]`**: For all your own models (recommended for AOT)
 - ✅ **Use `RegisterMapper`**: Only for third-party models you cannot modify
-- ✅ **Use Reflection Fallback**: For dynamic or rarely-used models
+- ✅ **Normal JIT Build**: For standard .NET applications with reflection support
 
 #### Manual Registration (Third-Party Models Only)
 
@@ -196,11 +196,11 @@ When the database returns `DBNull`, the generated mapper assigns `null` for null
 
 **Benefits of the Source Generator Approach:**
 - ✅ From 35 lines of boilerplate to a single `[JadeDbObject]` attribute
-- ✅ Full .NET Native AOT compatibility
+- ✅ Works in .NET Native AOT (tested with SQL Server, MySQL, PostgreSQL)
 - ✅ Better performance (no reflection overhead)
 - ✅ Compile-time type safety
 - ✅ Automatic null handling
-- ✅ Works seamlessly with existing reflection fallback
+- ✅ Compatible with standard JIT builds
 - ✅ Mix and match approaches as needed
 
 That's it for the setup part
@@ -240,10 +240,10 @@ That's it. We are all ready to start making requests to the databse.
 
 **Good News!** 🎉 You don't need to do anything special to use the database methods. The library handles mapping automatically:
 
-- **With pre-compiled mappers registered**: Uses your fast, AOT-compatible mapper
-- **Without pre-compiled mappers**: Automatically uses reflection-based mapping
+- **With `[JadeDbObject]` or manual mappers**: Uses pre-compiled mappers (recommended for AOT)
+- **Without pre-compiled mappers**: Falls back to reflection (use standard JIT builds)
 
-**Both approaches work seamlessly with the same API calls!**
+**Both approaches work with the same API calls!** Note: For Native AOT, always use `[JadeDbObject]` to avoid reflection.
 
 #### Example: Same Code, Different Mapping Approaches
 
@@ -663,24 +663,27 @@ public class OrderService
 
 1. **Zero Boilerplate**: Just add `[JadeDbObject]` to your models - from 35 lines to 1 attribute!
 2. **Automatic Registration**: Source Generator uses `[ModuleInitializer]` for instant availability
-3. **Mix and match**: Use `[JadeDbObject]` for your models, manual registration for third-party models, or reflection fallback
-4. **Full AOT Support**: All features work seamlessly in Native AOT applications
+3. **Mix and match**: Use `[JadeDbObject]` for your models, manual registration for third-party models, or standard JIT builds for dynamic scenarios
+4. **AOT Support**: Works in our testing with .NET Native AOT (SQL Server, MySQL, PostgreSQL) - **thorough testing mandatory**
 5. **Null Safety**: Nullable types (`int?`, `DateTime?`, `string?`) handled automatically
 
 
 ## Native AOT Compatibility & Limitations
  
-**JadeDbClient** is designed to be AOT-friendly by using Source Generators to avoid runtime reflection for object mapping. The library's mapping layer is fully compatible with Native AOT.
- 
-However, please note:
+**JadeDbClient** is designed to be AOT-friendly by using Source Generators to avoid runtime reflection for object mapping. 
 
-1. **Database Driver Limitations**: The underlying database drivers (`Microsoft.Data.SqlClient`, `MySqlConnector`, `Npgsql`) produce expected trim/AOT warnings during Native AOT publish (e.g., `IL2104`, `IL3053`). These warnings are:
+**Testing Results**: In our testing, JadeDbClient worked successfully with .NET Native AOT for SQL Server, MySQL, and PostgreSQL, though with expected trimming warnings from database drivers.
+ 
+**Important - Use with Caution**:
+
+1. **Database Driver Warnings**: The underlying database drivers (`Microsoft.Data.SqlClient`, `MySqlConnector`, `Npgsql`) produce trim/AOT warnings during Native AOT publish (e.g., `IL2104`, `IL3053`). These warnings are:
    - **Expected and documented** by the driver maintainers
    - **Outside of JadeDbClient's control** - they originate from the driver packages
-   - **Not blocking** - your application will compile and run successfully
-   - **Requires testing** - always test AOT builds thoroughly before production
+   - **Not blocking compilation** - your application will compile and run
 
-2. **Reflection Fallback**: If you do *not* use `[JadeDbObject]`, the library falls back to reflection, which is **not** AOT-safe and will likely fail or require manual trimming configuration in AOT builds.
+2. **Testing is Non-Negotiable**: Due to the aggressive trimming nature of .NET Native AOT, thorough testing of every functionality is **essential** before production deployment. Without `[JadeDbObject]`, the application may fall back to reflection mode, which can cause unexpected behaviors in AOT builds.
+
+3. **Normal JIT Builds**: If you do *not* use `[JadeDbObject]` and need reflection support, use standard .NET JIT builds instead of Native AOT.
 
 **Example AOT Warnings You'll See**:
 ```bash
@@ -692,9 +695,10 @@ warning IL2104: Assembly 'System.Configuration.ConfigurationManager' produced tr
 
 **Recommendation**: 
 - ✅ Always use `[JadeDbObject]` for your models in AOT applications
-- ✅ Test your AOT build thoroughly in a staging environment
+- ⚠️ **Testing is mandatory** - test every functionality thoroughly in a staging environment
+- ⚠️ Use Native AOT with caution - aggressive trimming may cause unexpected behaviors
 - ✅ Monitor database driver releases for AOT compatibility improvements
-- ✅ Your application will work correctly despite the warnings
+- ✅ For dynamic scenarios, use standard JIT builds instead
 
 ## 📚 Documentation
 
