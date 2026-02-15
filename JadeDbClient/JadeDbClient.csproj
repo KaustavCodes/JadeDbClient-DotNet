@@ -29,6 +29,7 @@
 
   <ItemGroup>
     <Folder Include="Attributes/" />
+    <Folder Include="Helpers/" />
   </ItemGroup>
 
   <ItemGroup>

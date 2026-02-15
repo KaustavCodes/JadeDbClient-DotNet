@@ -101,7 +101,9 @@ namespace JadeDbClient.SourceGenerator
 
                     foreach (var prop in model.Properties)
                     {
-                        string expr = GetMappingExpression(prop);
+                        string? expr = GetMappingExpression(prop);
+                        if (expr == null) continue;
+
                         sb.AppendLine($"            {prop.Name} = {expr},");
                     }
 
@@ -115,9 +117,9 @@ namespace JadeDbClient.SourceGenerator
             });
         }
 
-        private static string GetMappingExpression(PropertyToMap p)
+        private static string? GetMappingExpression(PropertyToMap p)
         {
-            if (!p.HasPublicSetter) return "default!"; // or skip property
+            if (!p.HasPublicSetter) return null; // Skip property (recommended)
 
             string ord = $"reader.GetOrdinal(\"{p.ColumnName}\")";
             string dbNull = $"reader.IsDBNull({ord})";
@@ -126,37 +128,77 @@ namespace JadeDbClient.SourceGenerator
 
             if (p.IsEnum)
             {
-                // Safe fallback for enums (handles int, byte, long, etc.)
                 baseExpr = $"({p.TypeFullName})reader.GetValue({ord})";
             }
             else
             {
                 baseExpr = p.TypeFullName switch
                 {
-                    "global::System.Boolean"  => $"reader.GetBoolean({ord})",
-                    "global::System.Byte"     => $"reader.GetByte({ord})",
-                    "global::System.Char"     => $"reader.GetChar({ord})",
+                    // Existing primitives
+                    "global::System.Boolean" => $"reader.GetBoolean({ord})",
+                    "global::System.Byte" => $"reader.GetByte({ord})",
+                    "global::System.Char" => $"reader.GetChar({ord})",
                     "global::System.DateTime" => $"reader.GetDateTime({ord})",
-                    "global::System.Decimal"  => $"reader.GetDecimal({ord})",
-                    "global::System.Double"   => $"reader.GetDouble({ord})",
-                    "global::System.Guid"     => $"reader.GetGuid({ord})",
-                    "global::System.Int16"    => $"reader.GetInt16({ord})",
-                    "global::System.Int32"    => $"reader.GetInt32({ord})",
-                    "global::System.Int64"    => $"reader.GetInt64({ord})",
-                    "global::System.Single"   => $"reader.GetFloat({ord})",
-                    "global::System.String"   => $"reader.GetString({ord})",
-                    _                         => $"reader.GetValue({ord}) is {{ }} v ? ({p.TypeFullName})v : default!"
+                    "global::System.Decimal" => $"reader.GetDecimal({ord})",
+                    "global::System.Double" => $"reader.GetDouble({ord})",
+                    "global::System.Guid" => $"reader.GetGuid({ord})",
+                    "global::System.Int16" => $"reader.GetInt16({ord})",
+                    "global::System.Int32" => $"reader.GetInt32({ord})",
+                    "global::System.Int64" => $"reader.GetInt64({ord})",
+                    "global::System.Single" => $"reader.GetFloat({ord})",
+                    "global::System.String" => $"reader.GetString({ord})",
+
+                    // New: DateTimeOffset
+                    "global::System.DateTimeOffset" => $"reader.GetDateTimeOffset({ord})",
+
+                    // New: TimeSpan (SQL 'time' type)
+                    "global::System.TimeSpan" => $"reader.GetFieldValue<global::System.TimeSpan>({ord})", // or GetValue + cast if needed
+
+                    // New: byte[]
+                    "byte[]" => $"ReadByteArray(reader, {ord})", // custom helper
+
+                    // New: Guid? is already covered by Guid + null check
+                    // JSON: treat as string (common pattern)
+                    "global::System.Text.Json.JsonElement"
+                    or "global::System.Text.Json.JsonDocument"
+                    or "global::Newtonsoft.Json.Linq.JToken" => $"reader.GetString({ord})", // parse later if needed
+
+                    // Fallback for everything else (including spatial, custom types)
+                    _ => $"reader.GetValue({ord}) is {{ }} v ? ({p.TypeFullName})v : default!"
                 };
             }
 
             if (p.IsNullable || !p.IsValueType)
             {
-                // Nullable value type or reference type → return null on DBNull
                 return $"{dbNull} ? null : {baseExpr}";
             }
 
-            // Non-nullable value type → no null check
+            // Non-nullable value type
+            if (p.IsEnum)
+            {
+                return $"{dbNull} ? default({p.TypeFullName}) : {baseExpr}";
+            }
+
+            // Non-nullable non-enum value type → strict (throws on DBNull)
             return baseExpr;
+        }
+
+        // Add this to the generated file (inside JadeDbMapperInitializer or separate static class)
+        private static byte[] ReadByteArray(global::System.Data.IDataRecord reader, int ordinal)
+        {
+            if (reader.IsDBNull(ordinal)) return null!; // or Array.Empty<byte>()
+
+            const int bufferSize = 8192;
+            using var ms = new global::System.IO.MemoryStream();
+            byte[] buffer = new byte[bufferSize];
+            long bytesRead;
+
+            while ((bytesRead = reader.GetBytes(ordinal, ms.Length, buffer, 0, buffer.Length)) > 0)
+            {
+                ms.Write(buffer, 0, (int)bytesRead);
+            }
+
+            return ms.ToArray();
         }
 
         private record PropertyToMap(

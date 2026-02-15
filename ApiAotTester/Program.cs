@@ -16,11 +16,11 @@ builder.Services.ConfigureHttpJsonOptions(options =>
 builder.Services.AddJadeDbService(options =>
 {
     // Register a pre-compiled mapper for DataModel (AOT-compatible)
-    options.RegisterMapper<DataModel>(reader => new DataModel
-    {
-        id = reader.GetInt32(reader.GetOrdinal("id")),
-        name = reader.IsDBNull(reader.GetOrdinal("name")) ? null : reader.GetString(reader.GetOrdinal("name"))
-    });
+    // options.RegisterMapper<DataModel>(reader => new DataModel
+    // {
+    //     id = reader.GetInt32(reader.GetOrdinal("id")),
+    //     name = reader.IsDBNull(reader.GetOrdinal("name")) ? null : reader.GetString(reader.GetOrdinal("name"))
+    // });
 
     // UserModel will use automatic reflection mapping (testing fallback)
     // No mapper registered for UserModel - it will use reflection automatically
@@ -151,7 +151,8 @@ app.MapGet("/test-aot-mixed", async (IDatabaseService dbConfig) =>
 app.Run();
 
 // DataModel has a pre-compiled mapper registered
-public class DataModel
+[JadeDbObject]
+public partial class DataModel
 {
     public int id { get; set; }
     public string? name { get; set; }

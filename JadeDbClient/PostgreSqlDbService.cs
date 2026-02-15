@@ -4,6 +4,7 @@ using JadeDbClient.Initialize;
 using Microsoft.Extensions.Configuration;
 using Npgsql;
 using System.Diagnostics.CodeAnalysis;
+using JadeDbClient.Helpers;
 
 namespace JadeDbClient;
 
@@ -11,14 +12,17 @@ public class PostgreSqlDbService : IDatabaseService
 {
     private readonly string _connectionString;
     private readonly JadeDbMapperOptions _mapperOptions;
+    private readonly Mapper _mapper;
 
     public IDbConnection? Connection { get; set; }
 
     public PostgreSqlDbService(IConfiguration configuration, JadeDbMapperOptions mapperOptions)
     {
+
         _connectionString = configuration["ConnectionStrings:DbConnection"]
             ?? throw new InvalidOperationException("Connection string 'ConnectionStrings:DbConnection' not found in configuration.");
         _mapperOptions = mapperOptions ?? throw new ArgumentNullException(nameof(mapperOptions));
+        _mapper = new Mapper(mapperOptions);
     }
 
     /// <summary>
@@ -62,54 +66,7 @@ public class PostgreSqlDbService : IDatabaseService
         };
     }
 
-    /// <summary>
-    /// Maps a data reader row to an object of type T using pre-compiled mapper or reflection fallback.
-    /// </summary>
-    private T MapObject<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicProperties | DynamicallyAccessedMemberTypes.PublicParameterlessConstructor)] T>(IDataReader reader)
-    {
-        // Try to use pre-compiled mapper first
-        if (_mapperOptions.TryGetMapper<T>(out var mapper))
-        {
-            return mapper!(reader);
-        }
 
-        // Fall back to reflection-based mapping
-        var properties = typeof(T).GetProperties();
-        var propertyDict = properties.ToDictionary(p => p.Name, StringComparer.OrdinalIgnoreCase);
-        T instance = Activator.CreateInstance<T>();
-
-        for (int i = 0; i < reader.FieldCount; i++)
-        {
-            var columnName = reader.GetName(i);
-
-            if (propertyDict.TryGetValue(columnName, out var property) && !reader.IsDBNull(i))
-            {
-                property.SetValue(instance, reader[i]);
-            }
-        }
-
-        return instance;
-    }
-
-    /// <summary>
-    /// Maps a DataRow to an object of type T using reflection fallback.
-    /// Note: Pre-compiled mappers work with IDataReader, not DataRow.
-    /// </summary>
-    private T MapObjectFromDataRow<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicProperties | DynamicallyAccessedMemberTypes.PublicParameterlessConstructor)] T>(DataRow row)
-    {
-        var properties = typeof(T).GetProperties();
-        T instance = Activator.CreateInstance<T>();
-
-        foreach (var property in properties)
-        {
-            if (row.Table.Columns.Contains(property.Name) && row[property.Name] != DBNull.Value)
-            {
-                property.SetValue(instance, row[property.Name]);
-            }
-        }
-
-        return instance;
-    }
 
     /// <summary>
     /// Executes a SQL query asynchronously and maps the result to a collection of objects of type T.
@@ -142,7 +99,7 @@ public class PostgreSqlDbService : IDatabaseService
                 {
                     while (reader.Read())
                     {
-                        results.Add(MapObject<T>(reader));
+                        results.Add(_mapper.MapObject<T>(reader));
                     }
                 }
             }
@@ -180,7 +137,7 @@ public class PostgreSqlDbService : IDatabaseService
                 {
                     if (reader.Read())
                     {
-                        return MapObject<T>(reader);
+                        return _mapper.MapObject<T>(reader);
                     }
                 }
             }
@@ -251,14 +208,11 @@ public class PostgreSqlDbService : IDatabaseService
                     }
                 }
 
-                using (var adapter = new NpgsqlDataAdapter(command))
+                using (var reader = await command.ExecuteReaderAsync())
                 {
-                    var dataTable = new DataTable();
-                    adapter.Fill(dataTable);
-
-                    foreach (DataRow row in dataTable.Rows)
+                    while (reader.Read())
                     {
-                        results.Add(MapObjectFromDataRow<T>(row));
+                        results.Add(_mapper.MapObject<T>(reader));
                     }
                 }
             }
