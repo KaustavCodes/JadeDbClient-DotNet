@@ -18,6 +18,17 @@
 - **Native AOT Support**: Full .NET Native AOT compatibility with compile-time code generation and automatic reflection fallback.
 - **Consistent API**: Provides a unified API to eliminate the headaches of switching databases.
 
+## 📊 Performance & User Experience
+
+**New to JadeDbClient?** Check out our **[Performance Guide](PERFORMANCE.md)** for detailed analysis:
+- 🚀 **5-10x faster** with Source Generator vs reflection
+- 💾 **3x less memory** usage
+- 📝 **97% code reduction** (35 lines → 1 attribute)
+- 💰 **Real-world cost savings** case studies
+- 🎯 **Clear decision matrix** for choosing the right approach
+
+**Quick Answer**: Use Source Generator for production apps - it's faster, easier, and future-proof!
+
 ## Installation
 
 Install the package via NuGet:
@@ -661,5 +672,11 @@ public class OrderService
 > JadeDbClient achieves **Tier-1 AOT compatibility** through Source Generator technology.
 > The library generates hard-coded mapper instructions at compile-time, eliminating runtime guessing.
 > All features work in Native AOT applications - compatibility depends on the database provider and host configuration.
+
+## 📚 Documentation
+
+- **[Performance Guide](PERFORMANCE.md)** - Comprehensive performance analysis, benchmarks, and optimization tips
+- **[Security Audit](SECURITY_AUDIT.md)** - Security assessment and best practices
+- **[GitHub Repository](https://github.com/KaustavCodes/JadeDbClient-DotNet)** - Source code and issue tracker
 
 Happy Coding! 
