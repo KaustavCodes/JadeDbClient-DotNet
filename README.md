@@ -14,7 +14,8 @@
 - **Streamlined Query Execution**: Perform queries with ease using a common interface, regardless of the database system.
 - **Stored Procedure Support**: Execute stored procedures across different databases without rewriting code.
 - **Transaction Support**: Full support for database transactions with commit and rollback capabilities across all database types.
-- **Native AOT Support**: Pre-compiled mapper registry for .NET Native AOT compatibility with automatic reflection fallback.
+- **🚀 Source Generator for AOT**: Automatically generates optimized mappers at compile-time with the `[JadeDbObject]` attribute - no manual registration needed!
+- **Native AOT Support**: Full .NET Native AOT compatibility with compile-time code generation and automatic reflection fallback.
 - **Consistent API**: Provides a unified API to eliminate the headaches of switching databases.
 
 ## Installation
@@ -85,97 +86,111 @@ builder.Services.AddJadeDbService();
 
 **This is the standard approach that works for all .NET applications. Your existing code will continue to work without any changes.**
 
-### Advanced: AOT-Compatible Mappers (Optional)
+### Advanced: AOT-Compatible Mappers with Source Generator
 
-> **New Feature** 🎉  
-> For .NET Native AOT applications or performance-critical scenarios, you can now register pre-compiled mappers to avoid reflection overhead.
+> **✨ Recommended Approach** 🎉  
+> JadeDbClient now includes a **Source Generator** that automatically creates optimized mappers at compile-time. Simply decorate your models with `[JadeDbObject]` and the mappers are generated for you!
 
-#### Why Use Pre-compiled Mappers?
+#### The Modern Way: Using `[JadeDbObject]` Attribute
 
-**Use pre-compiled mappers when:**
-- ✅ Building Native AOT applications (required for AOT compatibility)
-- ✅ Performance is critical (eliminates reflection overhead)
-- ✅ You want compile-time type safety for your mappings
-- ✅ Working with frequently-queried models
-
-**Stick with automatic reflection when:**
-- ✅ Building standard .NET applications (easier, less code)
-- ✅ Working with dynamic or rarely-used models
-- ✅ Rapid prototyping and development
-
-#### How to Configure AOT Mappers
+**For your own models**, you no longer need to write manual `RegisterMapper` calls. Just mark your models as `public partial` and add the `[JadeDbObject]` attribute:
 
 ```csharp
-builder.Services.AddJadeDbService(options =>
-{
-    // Register a pre-compiled mapper for a model
-    options.RegisterMapper<UserModel>(reader => new UserModel
-    {
-        Id = reader.GetInt32(0),
-        Name = reader.GetString(1),
-        Email = reader.GetString(2),
-        CreatedDate = reader.GetDateTime(3)
-    });
+using JadeDbClient.Attributes;
 
-    // Register additional mappers as needed
-    options.RegisterMapper<ProductModel>(reader => new ProductModel
-    {
-        ProductId = reader.GetInt32(0),
-        ProductName = reader.GetString(1),
-        Price = reader.GetDecimal(2)
-    });
-});
+[JadeDbObject]
+public partial class User
+{
+    public int UserId { get; set; }
+    public string Username { get; set; } = string.Empty;
+    public string Email { get; set; } = string.Empty;
+    public bool IsActive { get; set; }
+    public DateTime CreatedAt { get; set; }
+}
+
+[JadeDbObject]
+public partial class Order
+{
+    public int OrderId { get; set; }
+    public DateTime OrderDate { get; set; }
+    public decimal TotalAmount { get; set; }
+    public string Status { get; set; } = string.Empty;
+}
 ```
 
-#### Important Notes
+That's it! The Source Generator automatically creates optimized mappers for these classes at compile-time using a `[ModuleInitializer]`, so they're available immediately when your application starts.
 
-- 🔄 **Backward Compatible**: Types without registered mappers automatically use reflection
-- 🚀 **Performance**: Pre-compiled mappers are faster than reflection
-- 🎯 **Selective Registration**: Only register mappers for models you need - others use reflection automatically
-- 📝 **Column Mapping**: Use column indices (GetInt32(0), GetString(1)) or column names (reader["ColumnName"])
-
-#### Complete Example with AOT Mappers
+#### Simplified Setup
 
 ```csharp
 using JadeDbClient.Initialize;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// Register database service with custom mappers
-builder.Services.AddJadeDbService(options =>
-{
-    // Register mapper for frequently-used User model
-    options.RegisterMapper<User>(reader => new User
-    {
-        UserId = reader.GetInt32(reader.GetOrdinal("UserId")),
-        Username = reader.GetString(reader.GetOrdinal("Username")),
-        Email = reader.GetString(reader.GetOrdinal("Email")),
-        IsActive = reader.GetBoolean(reader.GetOrdinal("IsActive")),
-        CreatedAt = reader.GetDateTime(reader.GetOrdinal("CreatedAt"))
-    });
-    
-    // Register mapper for Order model  
-    options.RegisterMapper<Order>(reader => new Order
-    {
-        OrderId = reader.GetInt32(reader.GetOrdinal("OrderId")),
-        OrderDate = reader.GetDateTime(reader.GetOrdinal("OrderDate")),
-        TotalAmount = reader.GetDecimal(reader.GetOrdinal("TotalAmount")),
-        Status = reader.GetString(reader.GetOrdinal("Status"))
-    });
-    
-    // Note: Models without registered mappers (like Product, Category, etc.)
-    // will automatically use reflection-based mapping
-});
+// That's all you need! The Source Generator automatically registers all [JadeDbObject] models
+builder.Services.AddJadeDbService();
 
 var app = builder.Build();
 ```
 
-**Benefits of Pre-compiled Mappers:**
+#### Why Use the Source Generator?
+
+**Advantages of `[JadeDbObject]`:**
+- ✅ **Zero Boilerplate**: No manual mapper registration needed
+- ✅ **Full .NET Native AOT Compatibility**: Mappers generated at compile-time
+- ✅ **Better Performance**: No reflection overhead
+- ✅ **Compile-Time Type Safety**: Errors caught during compilation
+- ✅ **Automatic Null Handling**: Supports nullable types (`int?`, `DateTime?`, `string?`)
+- ✅ **Auto-Registration**: Uses `[ModuleInitializer]` for zero-config setup
+
+**When to use each approach:**
+- ✅ **Use `[JadeDbObject]`**: For all your own models (recommended)
+- ✅ **Use `RegisterMapper`**: Only for third-party models you cannot modify
+- ✅ **Use Reflection Fallback**: For dynamic or rarely-used models
+
+#### Manual Registration (Third-Party Models Only)
+
+If you need to map a third-party model that you cannot modify with `[JadeDbObject]`, you can still register mappers manually:
+
+```csharp
+builder.Services.AddJadeDbService(options =>
+{
+    // Only needed for third-party models you cannot modify
+    options.RegisterMapper<ThirdPartyModel>(reader => new ThirdPartyModel
+    {
+        Id = reader.GetInt32(reader.GetOrdinal("Id")),
+        Name = reader.GetString(reader.GetOrdinal("Name"))
+    });
+});
+```
+
+#### Null Safety Example
+
+The Source Generator automatically handles nullable types:
+
+```csharp
+[JadeDbObject]
+public partial class Product
+{
+    public int ProductId { get; set; }
+    public string ProductName { get; set; } = string.Empty;
+    public decimal Price { get; set; }
+    public int? Stock { get; set; }           // Nullable int
+    public DateTime? LastUpdated { get; set; } // Nullable DateTime
+    public string? Description { get; set; }   // Nullable string
+}
+```
+
+When the database returns `DBNull`, the generated mapper assigns `null` for nullable types and appropriate defaults for non-nullable types.
+
+**Benefits of the Source Generator Approach:**
+- ✅ From 35 lines of boilerplate to a single `[JadeDbObject]` attribute
 - ✅ Full .NET Native AOT compatibility
 - ✅ Better performance (no reflection overhead)
 - ✅ Compile-time type safety
-- ✅ Optional - existing code works without changes
-- ✅ Mix and match - use mappers for some types, reflection for others
+- ✅ Automatic null handling
+- ✅ Works seamlessly with existing reflection fallback
+- ✅ Mix and match approaches as needed
 
 That's it for the setup part
 
@@ -468,50 +483,60 @@ Choose the appropriate isolation level based on your concurrency requirements an
 
 ## Complete Real-World Example
 
-Here's a complete example showing how to use JadeDbClient in a real application, with both standard and AOT-optimized approaches:
+Here's a complete example showing how to use JadeDbClient with the Source Generator approach:
 
 ### Scenario: E-commerce Order Management
 
-#### Step 1: Setup (Program.cs)
+#### Step 1: Define Your Models with `[JadeDbObject]`
+
+```csharp
+using JadeDbClient.Attributes;
+
+// Simply add [JadeDbObject] attribute - mappers are generated automatically!
+[JadeDbObject]
+public partial class Order
+{
+    public int OrderId { get; set; }
+    public int CustomerId { get; set; }
+    public DateTime OrderDate { get; set; }
+    public decimal TotalAmount { get; set; }
+    public string Status { get; set; } = string.Empty;
+}
+
+[JadeDbObject]
+public partial class Customer
+{
+    public int CustomerId { get; set; }
+    public string Name { get; set; } = string.Empty;
+    public string Email { get; set; } = string.Empty;
+}
+
+[JadeDbObject]
+public partial class Product
+{
+    public int ProductId { get; set; }
+    public string ProductName { get; set; } = string.Empty;
+    public decimal Price { get; set; }
+    public int? Stock { get; set; }  // Nullable - handled automatically
+}
+```
+
+#### Step 2: Setup (Program.cs)
 
 ```csharp
 using JadeDbClient.Initialize;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// Option A: Standard approach (uses reflection for all models)
+// That's it! The Source Generator automatically registers all [JadeDbObject] models
+// No manual mapper registration needed!
 builder.Services.AddJadeDbService();
-
-// Option B: AOT-optimized approach (pre-compile frequently-used models)
-/*
-builder.Services.AddJadeDbService(options =>
-{
-    // Register mappers only for frequently-queried models
-    options.RegisterMapper<Order>(reader => new Order
-    {
-        OrderId = reader.GetInt32(reader.GetOrdinal("OrderId")),
-        CustomerId = reader.GetInt32(reader.GetOrdinal("CustomerId")),
-        OrderDate = reader.GetDateTime(reader.GetOrdinal("OrderDate")),
-        TotalAmount = reader.GetDecimal(reader.GetOrdinal("TotalAmount")),
-        Status = reader.GetString(reader.GetOrdinal("Status"))
-    });
-    
-    options.RegisterMapper<Customer>(reader => new Customer
-    {
-        CustomerId = reader.GetInt32(reader.GetOrdinal("CustomerId")),
-        Name = reader.GetString(reader.GetOrdinal("Name")),
-        Email = reader.GetString(reader.GetOrdinal("Email"))
-    });
-    
-    // Note: Product model will use automatic reflection mapping
-});
-*/
 
 var app = builder.Build();
 app.Run();
 ```
 
-#### Step 2: Using in Your Service/Controller
+#### Step 3: Using in Your Service/Controller
 
 ```csharp
 using System.Data;
@@ -526,7 +551,7 @@ public class OrderService
         _dbConfig = dbConfig;
     }
     
-    // Get all orders (works with or without registered mapper!)
+    // All models with [JadeDbObject] use optimized generated mappers
     public async Task<IEnumerable<Order>> GetAllOrdersAsync()
     {
         string query = "SELECT * FROM Orders WHERE Status = @Status";
@@ -623,54 +648,18 @@ public class OrderService
 }
 ```
 
-#### Step 3: Model Classes
-
-```csharp
-// These models work with or without registered mappers!
-public class Order
-{
-    public int OrderId { get; set; }
-    public int CustomerId { get; set; }
-    public DateTime OrderDate { get; set; }
-    public decimal TotalAmount { get; set; }
-    public string Status { get; set; } = string.Empty;
-}
-
-public class Customer
-{
-    public int CustomerId { get; set; }
-    public string Name { get; set; } = string.Empty;
-    public string Email { get; set; } = string.Empty;
-}
-
-public class Product
-{
-    public int ProductId { get; set; }
-    public string ProductName { get; set; } = string.Empty;
-    public decimal Price { get; set; }
-}
-
-public class OrderItem
-{
-    public int OrderItemId { get; set; }
-    public int OrderId { get; set; }
-    public int ProductId { get; set; }
-    public int Quantity { get; set; }
-    public decimal Price { get; set; }
-}
-```
-
 ### Key Takeaways
 
-1. **Your code doesn't change** whether you use pre-compiled mappers or not
-2. **Mix and match**: Register mappers for performance-critical models, use reflection for others
-3. **Start simple**: Begin with standard reflection, add pre-compiled mappers only when needed
-4. **All features work**: Transactions, stored procedures, queries - everything works with both approaches
+1. **Zero Boilerplate**: Just add `[JadeDbObject]` to your models - from 35 lines to 1 attribute!
+2. **Automatic Registration**: Source Generator uses `[ModuleInitializer]` for instant availability
+3. **Mix and match**: Use `[JadeDbObject]` for your models, manual registration for third-party models, or reflection fallback
+4. **Full AOT Support**: All features work seamlessly in Native AOT applications
+5. **Null Safety**: Nullable types (`int?`, `DateTime?`, `string?`) handled automatically
 
 
 > **Note**  
-> JadeDbClient can be used in Native AOT applications for common ADO.NET-style
-> database access scenarios. Compatibility depends on the database provider
-> and host application configuration.
+> JadeDbClient achieves **Tier-1 AOT compatibility** through Source Generator technology.
+> The library generates hard-coded mapper instructions at compile-time, eliminating runtime guessing.
+> All features work in Native AOT applications - compatibility depends on the database provider and host configuration.
 
 Happy Coding! 
