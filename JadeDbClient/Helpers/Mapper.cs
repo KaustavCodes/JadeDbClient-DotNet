@@ -9,7 +9,6 @@ namespace JadeDbClient.Helpers;
 
 internal class Mapper
 {
-    private static readonly ConcurrentDictionary<Type, bool> _loggedTypes = new();
     private readonly JadeDbMapperOptions _mapperOptions;
 
     public Mapper(JadeDbMapperOptions mapperOptions)
@@ -22,23 +21,8 @@ internal class Mapper
     /// </summary>
     internal T MapObject<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicProperties | DynamicallyAccessedMemberTypes.PublicParameterlessConstructor)] T>(IDataReader reader)
     {
-        bool useAot = _mapperOptions.TryGetMapper<T>(out var mapper);
-
-        // Log only once per type to avoid spamming
-        if (_loggedTypes.TryAdd(typeof(T), true))
-        {
-            if (useAot)
-            {
-                Console.WriteLine($"[JadeDbClient] Using AOT Mapper for: {typeof(T).Name}");
-            }
-            else
-            {
-                Console.WriteLine($"[JadeDbClient] Using Reflection Fallback for: {typeof(T).Name}");
-            }
-        }
-
         // Try to use pre-compiled mapper first
-        if (useAot)
+        if (_mapperOptions.TryGetMapper<T>(out var mapper))
         {
             return mapper!(reader);
         }

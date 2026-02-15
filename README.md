@@ -15,7 +15,7 @@
 - **Stored Procedure Support**: Execute stored procedures across different databases without rewriting code.
 - **Transaction Support**: Full support for database transactions with commit and rollback capabilities across all database types.
 - **🚀 Source Generator for AOT**: Automatically generates optimized mappers at compile-time with the `[JadeDbObject]` attribute - no manual registration needed!
-- **Native AOT Support**: Full .NET Native AOT compatibility with compile-time code generation and automatic reflection fallback.
+- **Native AOT Compatible**: Designed for .NET Native AOT applications with compile-time code generation (Note: Underlying database drivers may still have AOT limitations).
 - **Consistent API**: Provides a unified API to eliminate the headaches of switching databases.
 
 ## 📊 Performance & User Experience
@@ -668,10 +668,15 @@ public class OrderService
 5. **Null Safety**: Nullable types (`int?`, `DateTime?`, `string?`) handled automatically
 
 
-> **Note**  
-> JadeDbClient achieves **Tier-1 AOT compatibility** through Source Generator technology.
-> The library generates hard-coded mapper instructions at compile-time, eliminating runtime guessing.
-> All features work in Native AOT applications - compatibility depends on the database provider and host configuration.
+## Native AOT Compatibility & Limitations
+ 
+**JadeDbClient** is designed to be AOT-friendly by using Source Generators to avoid runtime reflection for object mapping. This solves the primary AOT challenge in ORMs/micro-ORMs.
+ 
+ However, please note:
+ 1. **Driver Limitations**: The underlying database drivers (`Microsoft.Data.SqlClient`, `MySqlConnector`, `Npgsql`) may still have limitations or produce warnings when compiled with Native AOT (e.g., `IL2104`, `IL3053`). These are outside of JadeDbClient's control.
+ 2. **Reflection Fallback**: If you do *not* use `[JadeDbObject]`, the library falls back to reflection, which is **not** AOT-safe and will likely fail or require manual trimming configuration in AOT builds.
+ 
+ **Recommendation**: Always use `[JadeDbObject]` for your models in AOT applications to ensure mappers are generated at compile-time.
 
 ## 📚 Documentation
 

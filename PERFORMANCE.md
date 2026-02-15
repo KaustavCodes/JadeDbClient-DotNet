@@ -190,9 +190,11 @@ Total: ~150 MB
 
 | Approach | AOT Compatible | Trimming Safe | Publish Size |
 |----------|----------------|---------------|--------------|
-| **Source Generator** | ✅ **Yes** | ✅ **Yes** | **Smallest** |
-| **Manual Registration** | ✅ **Yes** | ✅ **Yes** | **Small** |
+| **Source Generator** | ✅ **Yes*** | ✅ **Yes** | **Smallest** |
+| **Manual Registration** | ✅ **Yes*** | ✅ **Yes** | **Small** |
 | **Reflection** | ⚠️ **Limited** | ❌ **No** | **Largest** |
+
+*\*Note: JadeDbClient mapping is AOT-safe, but underlying drivers may satisfy AOT requirements to varying degrees.*
 
 ### AOT Performance Benefits
 
