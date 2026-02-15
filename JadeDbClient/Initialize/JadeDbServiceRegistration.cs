@@ -8,12 +8,12 @@ namespace JadeDbClient.Initialize;
 
 public static class JadeDbServiceRegistration
 {
-    public static void AddJadeDbService(this IServiceCollection services, Action<JadeMapperOptions>? configure = null)
+    public static void AddJadeDbService(this IServiceCollection services, Action<JadeDbMapperOptions>? configure = null)
     {
-        var options = new JadeMapperOptions();
+        var options = new JadeDbMapperOptions();
         configure?.Invoke(options);
 
-        // Register JadeMapperOptions as a singleton
+        // Register JadeDbMapperOptions as a singleton
         services.AddSingleton(options);
 
         // Setup the database
@@ -24,7 +24,7 @@ public static class JadeDbServiceRegistration
         {
             var configuration = serviceProvider.GetRequiredService<IConfiguration>();
             var databaseConfigService = serviceProvider.GetRequiredService<DatabaseConfigurationService>();
-            var mapperOptions = serviceProvider.GetRequiredService<JadeMapperOptions>();
+            var mapperOptions = serviceProvider.GetRequiredService<JadeDbMapperOptions>();
             var databaseType = databaseConfigService.GetDatabaseType();
             var licenseType = databaseConfigService.GetLicenseType();
 

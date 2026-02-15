@@ -1,12 +1,24 @@
 using System;
+using System.Collections.Generic;
 using System.Data;
 
 namespace JadeDbClient.Initialize;
 
-public class JadeMapperOptions
+public class JadeDbMapperOptions
 {
-    // Dictionary mapping Type -> Function that takes a DataReader and returns that Type
+    // 🚀 The static "Bridge": Source Generator drops mappers here at startup
+    internal static readonly Dictionary<Type, Func<IDataReader, object>> GlobalMappers = new();
+
     internal readonly Dictionary<Type, Func<IDataReader, object>> Mappers = new();
+
+    public JadeDbMapperOptions()
+    {
+        // 🚀 Pull globally generated mappers into this instance automatically
+        foreach (var mapper in GlobalMappers)
+        {
+            Mappers[mapper.Key] = mapper.Value;
+        }
+    }
 
     public void RegisterMapper<T>(Func<IDataReader, T> mapper) where T : class
     {

@@ -15,7 +15,7 @@ public class MapperRegistryTests
     public void JadeMapperOptions_CanRegisterMapper()
     {
         // Arrange
-        var options = new JadeMapperOptions();
+        var options = new JadeDbMapperOptions();
         
         // Act & Assert - RegisterMapper should not throw
         options.RegisterMapper<TestModel>(reader => new TestModel
@@ -44,7 +44,7 @@ public class MapperRegistryTests
         var serviceProvider = services.BuildServiceProvider();
         
         // Assert
-        var mapperOptions = serviceProvider.GetService<JadeMapperOptions>();
+        var mapperOptions = serviceProvider.GetService<JadeDbMapperOptions>();
         Assert.NotNull(mapperOptions);
     }
 
@@ -77,7 +77,7 @@ public class MapperRegistryTests
         
         // Assert
         Assert.True(callbackInvoked);
-        var mapperOptions = serviceProvider.GetRequiredService<JadeMapperOptions>();
+        var mapperOptions = serviceProvider.GetRequiredService<JadeDbMapperOptions>();
         Assert.NotNull(mapperOptions);
     }
 
@@ -91,7 +91,7 @@ public class MapperRegistryTests
                 { "ConnectionStrings:DbConnection", "Server=localhost;Database=test;User Id=test;Password=test;" }
             })
             .Build();
-        var mapperOptions = new JadeMapperOptions();
+        var mapperOptions = new JadeDbMapperOptions();
 
         // Act & Assert - These should not throw
         var msSqlService = new JadeDbClient.MsSqlDbService(configuration, mapperOptions);

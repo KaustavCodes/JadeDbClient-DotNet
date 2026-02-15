@@ -14,11 +14,11 @@ namespace JadeDbClient;
 public class MySqlDbService : IDatabaseService
 {
     private readonly string _connectionString;
-    private readonly JadeMapperOptions _mapperOptions;
+    private readonly JadeDbMapperOptions _mapperOptions;
 
     public IDbConnection? Connection { get; set; }
 
-    public MySqlDbService(IConfiguration configuration, JadeMapperOptions mapperOptions)
+    public MySqlDbService(IConfiguration configuration, JadeDbMapperOptions mapperOptions)
     {
         _connectionString = configuration["ConnectionStrings:DbConnection"]
             ?? throw new InvalidOperationException("Connection string 'ConnectionStrings:DbConnection' not found in configuration.");
