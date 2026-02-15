@@ -18,17 +18,6 @@
 - **Native AOT Compatible**: Designed for .NET Native AOT applications with compile-time code generation (Note: Underlying database drivers may still have AOT limitations).
 - **Consistent API**: Provides a unified API to eliminate the headaches of switching databases.
 
-## 📊 Performance & User Experience
-
-**New to JadeDbClient?** Check out our **[Performance Guide](PERFORMANCE.md)** for detailed analysis:
-- 🚀 **5-10x faster** with Source Generator vs reflection
-- 💾 **3x less memory** usage
-- 📝 **97% code reduction** (35 lines → 1 attribute)
-- 💰 **Real-world cost savings** case studies
-- 🎯 **Clear decision matrix** for choosing the right approach
-
-**Quick Answer**: Use Source Generator for production apps - it's faster, easier, and future-proof!
-
 ## Installation
 
 Install the package via NuGet:
