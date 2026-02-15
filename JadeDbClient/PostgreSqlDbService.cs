@@ -1,24 +1,28 @@
 using System.Data;
-using System.Collections.Generic;
-using System.Threading.Tasks;
 using JadeDbClient.Interfaces;
+using JadeDbClient.Initialize;
 using Microsoft.Extensions.Configuration;
 using Npgsql;
-using System.Reflection;
 using System.Diagnostics.CodeAnalysis;
+using JadeDbClient.Helpers;
 
 namespace JadeDbClient;
 
 public class PostgreSqlDbService : IDatabaseService
 {
     private readonly string _connectionString;
+    private readonly JadeDbMapperOptions _mapperOptions;
+    private readonly Mapper _mapper;
 
     public IDbConnection? Connection { get; set; }
 
-    public PostgreSqlDbService(IConfiguration configuration)
+    public PostgreSqlDbService(IConfiguration configuration, JadeDbMapperOptions mapperOptions)
     {
-        _connectionString = configuration["ConnectionStrings:DbConnection"] 
+
+        _connectionString = configuration["ConnectionStrings:DbConnection"]
             ?? throw new InvalidOperationException("Connection string 'ConnectionStrings:DbConnection' not found in configuration.");
+        _mapperOptions = mapperOptions ?? throw new ArgumentNullException(nameof(mapperOptions));
+        _mapper = new Mapper(mapperOptions);
     }
 
     /// <summary>
@@ -62,6 +66,8 @@ public class PostgreSqlDbService : IDatabaseService
         };
     }
 
+
+
     /// <summary>
     /// Executes a SQL query asynchronously and maps the result to a collection of objects of type T.
     /// </summary>
@@ -91,23 +97,9 @@ public class PostgreSqlDbService : IDatabaseService
 
                 using (var reader = await command.ExecuteReaderAsync())
                 {
-                    DataTable? schemaTable = reader.GetSchemaTable();
-                    var columnNames = schemaTable?.Rows.Cast<DataRow>()
-                                        .Select(row => row["ColumnName"].ToString()).ToList() ?? new List<string?>();
-
-                    var properties = typeof(T).GetProperties();
-
                     while (reader.Read())
                     {
-                        T instance = Activator.CreateInstance<T>();
-                        foreach (var property in properties)
-                        {
-                            if (columnNames.Contains(property.Name) && !reader.IsDBNull(reader.GetOrdinal(property.Name)))
-                            {
-                                property.SetValue(instance, reader[property.Name]);
-                            }
-                        }
-                        results.Add(instance);
+                        results.Add(_mapper.MapObject<T>(reader));
                     }
                 }
             }
@@ -143,23 +135,9 @@ public class PostgreSqlDbService : IDatabaseService
 
                 using (var reader = await command.ExecuteReaderAsync())
                 {
-                    DataTable? schemaTable = reader.GetSchemaTable();
-                    var columnNames = schemaTable?.Rows.Cast<DataRow>()
-                                        .Select(row => row["ColumnName"].ToString()).ToList() ?? new List<string?>();
-
-                    var properties = typeof(T).GetProperties();
-
                     if (reader.Read())
                     {
-                        T instance = Activator.CreateInstance<T>();
-                        foreach (var property in properties)
-                        {
-                            if (columnNames.Contains(property.Name) && !reader.IsDBNull(reader.GetOrdinal(property.Name)))
-                            {
-                                property.SetValue(instance, reader[property.Name]);
-                            }
-                        }
-                        return instance;
+                        return _mapper.MapObject<T>(reader);
                     }
                 }
             }
@@ -230,27 +208,11 @@ public class PostgreSqlDbService : IDatabaseService
                     }
                 }
 
-                using (var adapter = new NpgsqlDataAdapter(command))
+                using (var reader = await command.ExecuteReaderAsync())
                 {
-                    var dataTable = new DataTable();
-                    adapter.Fill(dataTable);
-
-                    var columnNames = dataTable.Columns.Cast<DataColumn>()
-                                        .Select(column => column.ColumnName).ToList();
-
-                    var properties = typeof(T).GetProperties();
-
-                    foreach (DataRow row in dataTable.Rows)
+                    while (reader.Read())
                     {
-                        T instance = Activator.CreateInstance<T>();
-                        foreach (var property in properties)
-                        {
-                            if (columnNames.Contains(property.Name) && row[property.Name] != DBNull.Value)
-                            {
-                                property.SetValue(instance, row[property.Name]);
-                            }
-                        }
-                        results.Add(instance);
+                        results.Add(_mapper.MapObject<T>(reader));
                     }
                 }
             }
@@ -385,7 +347,7 @@ public class PostgreSqlDbService : IDatabaseService
 
         return true;
     }
-    
+
     /// <summary>
     /// Bulk inserts a DataTable with jsonObject into a PostgreSQL table.
     /// </summary>
@@ -398,10 +360,10 @@ public class PostgreSqlDbService : IDatabaseService
     {
         using var connection = new NpgsqlConnection(_connectionString);
         connection.Open();
-    
+
         using var writer = connection.BeginBinaryImport(
             $"COPY {tableName} ({string.Join(", ", dataTable.Columns.Cast<DataColumn>().Select(c => c.ColumnName))}) FROM STDIN (FORMAT BINARY)");
-    
+
         foreach (DataRow row in dataTable.Rows)
         {
             writer.StartRow();
@@ -430,9 +392,9 @@ public class PostgreSqlDbService : IDatabaseService
                 }
             }
         }
-    
+
         writer.Complete();
-    
+
         return true;
     }
 

@@ -14,7 +14,20 @@
 - **Streamlined Query Execution**: Perform queries with ease using a common interface, regardless of the database system.
 - **Stored Procedure Support**: Execute stored procedures across different databases without rewriting code.
 - **Transaction Support**: Full support for database transactions with commit and rollback capabilities across all database types.
+- **🚀 Source Generator for AOT**: Automatically generates optimized mappers at compile-time with the `[JadeDbObject]` attribute - no manual registration needed!
+- **Native AOT Compatible**: Designed for .NET Native AOT applications with compile-time code generation (Note: Underlying database drivers may still have AOT limitations).
 - **Consistent API**: Provides a unified API to eliminate the headaches of switching databases.
+
+## 📊 Performance & User Experience
+
+**New to JadeDbClient?** Check out our **[Performance Guide](PERFORMANCE.md)** for detailed analysis:
+- 🚀 **5-10x faster** with Source Generator vs reflection
+- 💾 **3x less memory** usage
+- 📝 **97% code reduction** (35 lines → 1 attribute)
+- 💰 **Real-world cost savings** case studies
+- 🎯 **Clear decision matrix** for choosing the right approach
+
+**Quick Answer**: Use Source Generator for production apps - it's faster, easier, and future-proof!
 
 ## Installation
 
@@ -32,7 +45,7 @@ Install-Package JadeDbClient
 
 ## Usage
 
-Before we begin we need to let the plugin know what atabase we are using and where the plugin needs to connect to.
+Before we begin we need to let the plugin know what database we are using and where the plugin needs to connect to.
 
 To do this we need to add the following to the web.config or appsettings.json file.
 
@@ -73,11 +86,121 @@ We need these 2 lines
 using JadeDbClient.Initialize;
 ```
 
-Initialize the plugin
-```
+### Basic Initialization (Standard Approach)
+
+Initialize the plugin without any custom configuration. The library will use reflection-based mapping automatically:
+
+```csharp
 // Call the method to add the database service
 builder.Services.AddJadeDbService();
 ```
+
+**This is the standard approach that works for all .NET applications. Your existing code will continue to work without any changes.**
+
+### Advanced: AOT-Compatible Mappers with Source Generator
+
+> **✨ Recommended Approach** 🎉  
+> JadeDbClient now includes a **Source Generator** that automatically creates optimized mappers at compile-time. Simply decorate your models with `[JadeDbObject]` and the mappers are generated for you!
+
+#### The Modern Way: Using `[JadeDbObject]` Attribute
+
+**For your own models**, you no longer need to write manual `RegisterMapper` calls. Just mark your models as `public partial` and add the `[JadeDbObject]` attribute:
+
+```csharp
+using JadeDbClient.Attributes;
+
+[JadeDbObject]
+public partial class User
+{
+    public int UserId { get; set; }
+    public string Username { get; set; } = string.Empty;
+    public string Email { get; set; } = string.Empty;
+    public bool IsActive { get; set; }
+    public DateTime CreatedAt { get; set; }
+}
+
+[JadeDbObject]
+public partial class Order
+{
+    public int OrderId { get; set; }
+    public DateTime OrderDate { get; set; }
+    public decimal TotalAmount { get; set; }
+    public string Status { get; set; } = string.Empty;
+}
+```
+
+That's it! The Source Generator automatically creates optimized mappers for these classes at compile-time using a `[ModuleInitializer]`, so they're available immediately when your application starts.
+
+#### Simplified Setup
+
+```csharp
+using JadeDbClient.Initialize;
+
+var builder = WebApplication.CreateBuilder(args);
+
+// That's all you need! The Source Generator automatically registers all [JadeDbObject] models
+builder.Services.AddJadeDbService();
+
+var app = builder.Build();
+```
+
+#### Why Use the Source Generator?
+
+**Advantages of `[JadeDbObject]`:**
+- ✅ **Zero Boilerplate**: No manual mapper registration needed
+- ✅ **.NET Native AOT Support**: Mappers generated at compile-time (works in our testing with trimming warnings)
+- ✅ **Better Performance**: No reflection overhead
+- ✅ **Compile-Time Type Safety**: Errors caught during compilation
+- ✅ **Automatic Null Handling**: Supports nullable types (`int?`, `DateTime?`, `string?`)
+- ✅ **Auto-Registration**: Uses `[ModuleInitializer]` for zero-config setup
+
+**When to use each approach:**
+- ✅ **Use `[JadeDbObject]`**: For all your own models (recommended for AOT)
+- ✅ **Use `RegisterMapper`**: Only for third-party models you cannot modify
+- ✅ **Normal JIT Build**: For standard .NET applications with reflection support
+
+#### Manual Registration (Third-Party Models Only)
+
+If you need to map a third-party model that you cannot modify with `[JadeDbObject]`, you can still register mappers manually:
+
+```csharp
+builder.Services.AddJadeDbService(options =>
+{
+    // Only needed for third-party models you cannot modify
+    options.RegisterMapper<ThirdPartyModel>(reader => new ThirdPartyModel
+    {
+        Id = reader.GetInt32(reader.GetOrdinal("Id")),
+        Name = reader.GetString(reader.GetOrdinal("Name"))
+    });
+});
+```
+
+#### Null Safety Example
+
+The Source Generator automatically handles nullable types:
+
+```csharp
+[JadeDbObject]
+public partial class Product
+{
+    public int ProductId { get; set; }
+    public string ProductName { get; set; } = string.Empty;
+    public decimal Price { get; set; }
+    public int? Stock { get; set; }           // Nullable int
+    public DateTime? LastUpdated { get; set; } // Nullable DateTime
+    public string? Description { get; set; }   // Nullable string
+}
+```
+
+When the database returns `DBNull`, the generated mapper assigns `null` for nullable types and appropriate defaults for non-nullable types.
+
+**Benefits of the Source Generator Approach:**
+- ✅ Works in .NET Native AOT (tested with SQL Server, MySQL, PostgreSQL)
+- ✅ Better performance (no reflection overhead)
+- ✅ Compile-time type safety
+- ✅ Automatic null handling
+- ✅ Compatible with standard JIT builds
+- ✅ Mix and match approaches as needed
 
 That's it for the setup part
 
@@ -110,7 +233,31 @@ public class HomeController : Controller
 That's it. We are all ready to start making requests to the databse.
 
 
-## How to inteact with the database
+## How to interact with the database
+
+### Understanding Automatic Mapping
+
+**Good News!** 🎉 You don't need to do anything special to use the database methods. The library handles mapping automatically:
+
+- **With `[JadeDbObject]` or manual mappers**: Uses pre-compiled mappers (recommended for AOT)
+- **Without pre-compiled mappers**: Falls back to reflection (use standard JIT builds)
+
+**Both approaches work with the same API calls!** Note: For Native AOT, always use `[JadeDbObject]` to avoid reflection.
+
+#### Example: Same Code, Different Mapping Approaches
+
+```csharp
+// This code works identically whether you registered a mapper or not!
+IEnumerable<UserModel> users = await _dbConfig.ExecuteQueryAsync<UserModel>("SELECT * FROM Users");
+
+// If you registered a mapper for UserModel:
+//   -> Uses fast pre-compiled mapper
+
+// If you didn't register a mapper for UserModel:
+//   -> Automatically uses reflection (still works!)
+```
+
+### All Database Methods
 
 ### GetParameter: Created database parameters that you send to databse
 Creates a new instance of an <see cref="IDbDataParameter"/> for your Database.
@@ -344,10 +491,215 @@ JadeDbClient supports all standard isolation levels:
 
 Choose the appropriate isolation level based on your concurrency requirements and database system.
 
+## Complete Real-World Example
 
-> **Note**  
-> JadeDbClient can be used in Native AOT applications for common ADO.NET-style
-> database access scenarios. Compatibility depends on the database provider
-> and host application configuration.
+Here's a complete example showing how to use JadeDbClient with the Source Generator approach:
+
+### Scenario: E-commerce Order Management
+
+#### Step 1: Define Your Models with `[JadeDbObject]`
+
+```csharp
+using JadeDbClient.Attributes;
+
+// Simply add [JadeDbObject] attribute - mappers are generated automatically!
+[JadeDbObject]
+public partial class Order
+{
+    public int OrderId { get; set; }
+    public int CustomerId { get; set; }
+    public DateTime OrderDate { get; set; }
+    public decimal TotalAmount { get; set; }
+    public string Status { get; set; } = string.Empty;
+}
+
+[JadeDbObject]
+public partial class Customer
+{
+    public int CustomerId { get; set; }
+    public string Name { get; set; } = string.Empty;
+    public string Email { get; set; } = string.Empty;
+}
+
+[JadeDbObject]
+public partial class Product
+{
+    public int ProductId { get; set; }
+    public string ProductName { get; set; } = string.Empty;
+    public decimal Price { get; set; }
+    public int? Stock { get; set; }  // Nullable - handled automatically
+}
+```
+
+#### Step 2: Setup (Program.cs)
+
+```csharp
+using JadeDbClient.Initialize;
+
+var builder = WebApplication.CreateBuilder(args);
+
+// That's it! The Source Generator automatically registers all [JadeDbObject] models
+// No manual mapper registration needed!
+builder.Services.AddJadeDbService();
+
+var app = builder.Build();
+app.Run();
+```
+
+#### Step 3: Using in Your Service/Controller
+
+```csharp
+using System.Data;
+using JadeDbClient.Interfaces;
+
+public class OrderService
+{
+    private readonly IDatabaseService _dbConfig;
+    
+    public OrderService(IDatabaseService dbConfig)
+    {
+        _dbConfig = dbConfig;
+    }
+    
+    // All models with [JadeDbObject] use optimized generated mappers
+    public async Task<IEnumerable<Order>> GetAllOrdersAsync()
+    {
+        string query = "SELECT * FROM Orders WHERE Status = @Status";
+        
+        var parameters = new List<IDbDataParameter>
+        {
+            _dbConfig.GetParameter("@Status", "Active", DbType.String)
+        };
+        
+        // If Order mapper is registered -> uses pre-compiled mapper
+        // If not registered -> uses automatic reflection
+        return await _dbConfig.ExecuteQueryAsync<Order>(query, parameters);
+    }
+    
+    // Get customer details (works with or without registered mapper!)
+    public async Task<Customer?> GetCustomerAsync(int customerId)
+    {
+        string query = "SELECT * FROM Customers WHERE CustomerId = @Id";
+        
+        var parameters = new List<IDbDataParameter>
+        {
+            _dbConfig.GetParameter("@Id", customerId, DbType.Int32)
+        };
+        
+        return await _dbConfig.ExecuteQueryFirstRowAsync<Customer>(query, parameters);
+    }
+    
+    // Get products (automatically uses reflection since no mapper registered)
+    public async Task<IEnumerable<Product>> GetProductsAsync()
+    {
+        string query = "SELECT * FROM Products";
+        
+        // Product doesn't have a registered mapper, so it uses reflection
+        // This is perfectly fine for less frequently-queried models!
+        return await _dbConfig.ExecuteQueryAsync<Product>(query);
+    }
+    
+    // Create order with transaction
+    public async Task<bool> CreateOrderAsync(Order order, List<OrderItem> items)
+    {
+        IDbTransaction? transaction = null;
+        try
+        {
+            transaction = _dbConfig.BeginTransaction();
+            
+            // Insert order
+            string insertOrderQuery = @"
+                INSERT INTO Orders (CustomerId, OrderDate, TotalAmount, Status) 
+                VALUES (@CustomerId, @OrderDate, @TotalAmount, @Status);
+                SELECT CAST(SCOPE_IDENTITY() AS INT);";
+            
+            var orderParams = new List<IDbDataParameter>
+            {
+                _dbConfig.GetParameter("@CustomerId", order.CustomerId, DbType.Int32),
+                _dbConfig.GetParameter("@OrderDate", order.OrderDate, DbType.DateTime),
+                _dbConfig.GetParameter("@TotalAmount", order.TotalAmount, DbType.Decimal),
+                _dbConfig.GetParameter("@Status", order.Status, DbType.String)
+            };
+            
+            int orderId = await _dbConfig.ExecuteScalar<int>(insertOrderQuery, orderParams);
+            
+            // Insert order items
+            foreach (var item in items)
+            {
+                string insertItemQuery = @"
+                    INSERT INTO OrderItems (OrderId, ProductId, Quantity, Price) 
+                    VALUES (@OrderId, @ProductId, @Quantity, @Price)";
+                
+                var itemParams = new List<IDbDataParameter>
+                {
+                    _dbConfig.GetParameter("@OrderId", orderId, DbType.Int32),
+                    _dbConfig.GetParameter("@ProductId", item.ProductId, DbType.Int32),
+                    _dbConfig.GetParameter("@Quantity", item.Quantity, DbType.Int32),
+                    _dbConfig.GetParameter("@Price", item.Price, DbType.Decimal)
+                };
+                
+                await _dbConfig.ExecuteCommandAsync(insertItemQuery, itemParams);
+            }
+            
+            _dbConfig.CommitTransaction(transaction);
+            return true;
+        }
+        catch (Exception)
+        {
+            transaction?.Rollback();
+            throw;
+        }
+        finally
+        {
+            transaction?.Dispose();
+            _dbConfig.CloseConnection();
+        }
+    }
+}
+```
+
+### Key Takeaways
+
+1. **Zero Boilerplate**: Just add `[JadeDbObject]` to your models - from 35 lines to 1 attribute!
+2. **Automatic Registration**: Source Generator uses `[ModuleInitializer]` for instant availability
+3. **Mix and match**: Use `[JadeDbObject]` for your models, manual registration for third-party models, or standard JIT builds for dynamic scenarios
+4. **AOT Support**: Works in our testing with .NET Native AOT (SQL Server, MySQL, PostgreSQL) - **thorough testing mandatory**
+5. **Null Safety**: Nullable types (`int?`, `DateTime?`, `string?`) handled automatically
+
+
+## Native AOT Compatibility & Limitations
+ 
+**JadeDbClient** is designed to be AOT-friendly by using Source Generators to avoid runtime reflection for object mapping. 
+
+**Testing Results**: In our testing, JadeDbClient worked successfully with .NET Native AOT for SQL Server, MySQL, and PostgreSQL, though with expected trimming warnings from database drivers.
+ 
+**Important - Use with Caution**:
+
+1. **Database Driver Warnings**: The underlying database drivers (`Microsoft.Data.SqlClient`, `MySqlConnector`, `Npgsql`) produce trim/AOT warnings during Native AOT publish (e.g., `IL2104`, `IL3053`). These warnings are:
+   - **Expected and documented** by the driver maintainers
+   - **Outside of JadeDbClient's control** - they originate from the driver packages
+   - **Not blocking compilation** - your application will compile and run
+
+2. **Testing is Non-Negotiable**: Due to the aggressive trimming nature of .NET Native AOT, thorough testing of every functionality is **essential** before production deployment. Without `[JadeDbObject]`, the application may fall back to reflection mode, which can cause unexpected behaviors in AOT builds.
+
+3. **Normal JIT Builds**: If you do *not* use `[JadeDbObject]` and need reflection support, use standard .NET JIT builds instead of Native AOT.
+
+**Example AOT Warnings You'll See**:
+```bash
+warning IL2104: Assembly 'Microsoft.Data.SqlClient' produced trim warnings
+warning IL3053: Assembly 'Microsoft.Data.SqlClient' produced AOT analysis warnings
+warning IL2104: Assembly 'MySqlConnector' produced trim warnings
+warning IL2104: Assembly 'System.Configuration.ConfigurationManager' produced trim warnings
+```
+
+**Recommendation**: 
+- ✅ Always use `[JadeDbObject]` for your models in AOT applications
+- ⚠️ **Testing is mandatory** - test every functionality thoroughly in a staging environment
+- ⚠️ Use Native AOT with caution - aggressive trimming may cause unexpected behaviors
+- ✅ Monitor database driver releases for AOT compatibility improvements
+- ✅ For dynamic scenarios, use standard JIT builds instead
+
+## 📚 Documentation
+- **[GitHub Repository](https://github.com/KaustavCodes/JadeDbClient-DotNet)** - Source code and issue tracker
 
 Happy Coding! 

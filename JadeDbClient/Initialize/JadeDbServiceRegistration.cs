@@ -8,8 +8,14 @@ namespace JadeDbClient.Initialize;
 
 public static class JadeDbServiceRegistration
 {
-    public static void AddJadeDbService(this IServiceCollection services)
+    public static void AddJadeDbService(this IServiceCollection services, Action<JadeDbMapperOptions>? configure = null)
     {
+        var options = new JadeDbMapperOptions();
+        configure?.Invoke(options);
+
+        // Register JadeDbMapperOptions as a singleton
+        services.AddSingleton(options);
+
         // Setup the database
         services.AddSingleton<DatabaseConfigurationService>();
 
@@ -18,14 +24,15 @@ public static class JadeDbServiceRegistration
         {
             var configuration = serviceProvider.GetRequiredService<IConfiguration>();
             var databaseConfigService = serviceProvider.GetRequiredService<DatabaseConfigurationService>();
+            var mapperOptions = serviceProvider.GetRequiredService<JadeDbMapperOptions>();
             var databaseType = databaseConfigService.GetDatabaseType();
             var licenseType = databaseConfigService.GetLicenseType();
 
             return databaseType switch
             {
-                "MsSql" => (IDatabaseService)new MsSqlDbService(configuration),
-                "MySql" => (IDatabaseService)new MySqlDbService(configuration),
-                "PostgreSQL" => (IDatabaseService)new PostgreSqlDbService(configuration),
+                "MsSql" => (IDatabaseService)new MsSqlDbService(configuration, mapperOptions),
+                "MySql" => (IDatabaseService)new MySqlDbService(configuration, mapperOptions),
+                "PostgreSQL" => (IDatabaseService)new PostgreSqlDbService(configuration, mapperOptions),
                 _ => throw new Exception("Unsupported database type"),
             };
         });
