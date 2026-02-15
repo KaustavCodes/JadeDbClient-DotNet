@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Http.HttpResults;
 using JadeDbClient.Initialize;
 using JadeDbClient.Interfaces;
 using System.Data;
+using JadeDbClient.Attributes;
 
 var builder = WebApplication.CreateSlimBuilder(args);
 
@@ -11,7 +12,19 @@ builder.Services.ConfigureHttpJsonOptions(options =>
     options.SerializerOptions.TypeInfoResolverChain.Insert(0, AppJsonSerializerContext.Default);
 });
 
-builder.Services.AddJadeDbService();
+// Register JadeDbService with AOT-compatible pre-compiled mappers
+builder.Services.AddJadeDbService(options =>
+{
+    // Register a pre-compiled mapper for DataModel (AOT-compatible)
+    // options.RegisterMapper<DataModel>(reader => new DataModel
+    // {
+    //     id = reader.GetInt32(reader.GetOrdinal("id")),
+    //     name = reader.IsDBNull(reader.GetOrdinal("name")) ? null : reader.GetString(reader.GetOrdinal("name"))
+    // });
+
+    // UserModel will use automatic reflection mapping (testing fallback)
+    // No mapper registered for UserModel - it will use reflection automatically
+});
 
 // Learn more about configuring OpenAPI at https://aka.ms/aspnet/openapi
 builder.Services.AddOpenApi();
@@ -81,17 +94,110 @@ app.MapGet("/test-mssql", async (IDatabaseService dbConfig) =>
     return results;
 });
 
+// Test endpoint for AOT mapper with pre-compiled mapper
+app.MapGet("/test-aot-mapper", async (IDatabaseService dbConfig) =>
+{
+    // This uses DataModel which has a pre-compiled mapper registered
+    // Should use the fast, AOT-compatible mapper
+    // Using TOP for SQL Server compatibility (works in MsSql, ignored in PostgreSQL/MySQL)
+    string query = "SELECT TOP 10 * FROM tbl_test;";
+    IEnumerable<DataModel> results = await dbConfig.ExecuteQueryAsync<DataModel>(query);
+
+    return Results.Ok(new DataModelResponse
+    {
+        message = "Using pre-compiled mapper for DataModel",
+        count = results.Count(),
+        data = results
+    });
+});
+
+// Test endpoint for automatic reflection fallback
+app.MapGet("/test-aot-reflection", async (IDatabaseService dbConfig) =>
+{
+    // This uses UserModel which does NOT have a pre-compiled mapper
+    // Should automatically fall back to reflection-based mapping
+    string query = "SELECT TOP 10 id as UserId, name as UserName FROM tbl_test;";
+    IEnumerable<UserModel> results = await dbConfig.ExecuteQueryAsync<UserModel>(query);
+
+    return Results.Ok(new UserModelResponse
+    {
+        message = "Using automatic reflection for UserModel (no mapper registered)",
+        count = results.Count(),
+        data = results
+    });
+});
+
+// Test endpoint for mixed usage (both approaches in one request)
+app.MapGet("/test-aot-mixed", async (IDatabaseService dbConfig) =>
+{
+    // First query uses pre-compiled mapper
+    string query1 = "SELECT TOP 5 * FROM tbl_test;";
+    IEnumerable<DataModel> dataResults = await dbConfig.ExecuteQueryAsync<DataModel>(query1);
+
+    // Second query uses reflection fallback
+    string query2 = "SELECT TOP 5 id as UserId, name as UserName FROM tbl_test;";
+    IEnumerable<UserModel> userResults = await dbConfig.ExecuteQueryAsync<UserModel>(query2);
+
+    return Results.Ok(new MixedResponse
+    {
+        message = "Mixed usage: DataModel with mapper, UserModel with reflection",
+        dataModelCount = dataResults.Count(),
+        userModelCount = userResults.Count(),
+        dataModels = dataResults,
+        userModels = userResults
+    });
+});
+
 app.Run();
 
-public class DataModel
+// DataModel has a pre-compiled mapper registered
+[JadeDbObject]
+public partial class DataModel
 {
     public int id { get; set; }
     public string? name { get; set; }
 }
 
+// UserModel does NOT have a pre-compiled mapper - uses reflection fallback
+[JadeDbObject]
+public partial class UserModel
+{
+    public int UserId { get; set; }
+    public string? UserName { get; set; }
+}
+
+public class DataModelResponse
+{
+    public string message { get; set; } = "";
+    public int count { get; set; }
+    public IEnumerable<DataModel> data { get; set; } = Array.Empty<DataModel>();
+}
+
+public class UserModelResponse
+{
+    public string message { get; set; } = "";
+    public int count { get; set; }
+    public IEnumerable<UserModel> data { get; set; } = Array.Empty<UserModel>();
+}
+
+public class MixedResponse
+{
+    public string message { get; set; } = "";
+    public int dataModelCount { get; set; }
+    public int userModelCount { get; set; }
+    public IEnumerable<DataModel> dataModels { get; set; } = Array.Empty<DataModel>();
+    public IEnumerable<UserModel> userModels { get; set; } = Array.Empty<UserModel>();
+}
+
 [JsonSerializable(typeof(IEnumerable<DataModel>))]
-[JsonSerializable(typeof(List<DataModel>))] // Often needed if interface implementation matches list
+[JsonSerializable(typeof(List<DataModel>))]
 [JsonSerializable(typeof(DataModel))]
+[JsonSerializable(typeof(IEnumerable<UserModel>))]
+[JsonSerializable(typeof(List<UserModel>))]
+[JsonSerializable(typeof(UserModel))]
+[JsonSerializable(typeof(DataModelResponse))]
+[JsonSerializable(typeof(UserModelResponse))]
+[JsonSerializable(typeof(MixedResponse))]
 internal partial class AppJsonSerializerContext : JsonSerializerContext
 {
 
