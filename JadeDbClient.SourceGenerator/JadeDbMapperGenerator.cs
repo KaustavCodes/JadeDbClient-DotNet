@@ -96,7 +96,7 @@ namespace JadeDbClient.SourceGenerator
 
                 foreach (var model in models)
                 {
-                    sb.AppendLine($"        JadeDbMapperOptions.GlobalMappers[typeof({model.FullName})] = static (global::System.Data.IDataRecord reader) => new {model.FullName}");
+                    sb.AppendLine($"        JadeDbMapperOptions.RegisterGlobalMapper<{model.FullName}>(static (global::System.Data.IDataReader reader) => new {model.FullName}");
                     sb.AppendLine("        {");
 
                     foreach (var prop in model.Properties)
@@ -107,7 +107,7 @@ namespace JadeDbClient.SourceGenerator
                         sb.AppendLine($"            {prop.Name} = {expr},");
                     }
 
-                    sb.AppendLine("        };");
+                    sb.AppendLine("        });");
                 }
 
                 sb.AppendLine("    }");
@@ -164,7 +164,7 @@ namespace JadeDbClient.SourceGenerator
                     or "global::Newtonsoft.Json.Linq.JToken" => $"reader.GetString({ord})", // parse later if needed
 
                     // Fallback for everything else (including spatial, custom types)
-                    _ => $"reader.GetValue({ord}) is {{ }} v ? ({p.TypeFullName})v : default!"
+                    _ => $"reader.GetValue({ord}) is {{ }} v_{p.Name} ? ({p.TypeFullName})v_{p.Name} : default!"
                 };
             }
 

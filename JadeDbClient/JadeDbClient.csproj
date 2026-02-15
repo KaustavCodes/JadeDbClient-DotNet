@@ -33,6 +33,20 @@
   </ItemGroup>
 
   <ItemGroup>
+    <!-- Reference the generator to include it in the build -->
     <ProjectReference Include="../JadeDbClient.SourceGenerator/JadeDbClient.SourceGenerator.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
+    
   </ItemGroup>
+
+  <PropertyGroup>
+    <TargetsForTfmSpecificPackageFile>$(TargetsForTfmSpecificPackageFile);_AddGeneratorToPackage</TargetsForTfmSpecificPackageFile>
+  </PropertyGroup>
+
+  <Target Name="_AddGeneratorToPackage" DependsOnTargets="ResolveProjectReferences">
+    <ItemGroup>
+      <TfmSpecificPackageFile Include="@(_ResolvedProjectReferencePaths)" 
+                              Condition="'%(_ResolvedProjectReferencePaths.FileName)' == 'JadeDbClient.SourceGenerator'" 
+                              PackagePath="analyzers/dotnet/cs" />
+    </ItemGroup>
+  </Target>
 </Project>

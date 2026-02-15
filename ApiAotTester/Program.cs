@@ -103,7 +103,7 @@ app.MapGet("/test-aot-mapper", async (IDatabaseService dbConfig) =>
     string query = "SELECT TOP 10 * FROM tbl_test;";
     IEnumerable<DataModel> results = await dbConfig.ExecuteQueryAsync<DataModel>(query);
 
-    return Results.Ok(new
+    return Results.Ok(new DataModelResponse
     {
         message = "Using pre-compiled mapper for DataModel",
         count = results.Count(),
@@ -119,7 +119,7 @@ app.MapGet("/test-aot-reflection", async (IDatabaseService dbConfig) =>
     string query = "SELECT TOP 10 id as UserId, name as UserName FROM tbl_test;";
     IEnumerable<UserModel> results = await dbConfig.ExecuteQueryAsync<UserModel>(query);
 
-    return Results.Ok(new
+    return Results.Ok(new UserModelResponse
     {
         message = "Using automatic reflection for UserModel (no mapper registered)",
         count = results.Count(),
@@ -138,7 +138,7 @@ app.MapGet("/test-aot-mixed", async (IDatabaseService dbConfig) =>
     string query2 = "SELECT TOP 5 id as UserId, name as UserName FROM tbl_test;";
     IEnumerable<UserModel> userResults = await dbConfig.ExecuteQueryAsync<UserModel>(query2);
 
-    return Results.Ok(new
+    return Results.Ok(new MixedResponse
     {
         message = "Mixed usage: DataModel with mapper, UserModel with reflection",
         dataModelCount = dataResults.Count(),
@@ -166,12 +166,38 @@ public partial class UserModel
     public string? UserName { get; set; }
 }
 
+public class DataModelResponse
+{
+    public string message { get; set; } = "";
+    public int count { get; set; }
+    public IEnumerable<DataModel> data { get; set; } = Array.Empty<DataModel>();
+}
+
+public class UserModelResponse
+{
+    public string message { get; set; } = "";
+    public int count { get; set; }
+    public IEnumerable<UserModel> data { get; set; } = Array.Empty<UserModel>();
+}
+
+public class MixedResponse
+{
+    public string message { get; set; } = "";
+    public int dataModelCount { get; set; }
+    public int userModelCount { get; set; }
+    public IEnumerable<DataModel> dataModels { get; set; } = Array.Empty<DataModel>();
+    public IEnumerable<UserModel> userModels { get; set; } = Array.Empty<UserModel>();
+}
+
 [JsonSerializable(typeof(IEnumerable<DataModel>))]
 [JsonSerializable(typeof(List<DataModel>))]
 [JsonSerializable(typeof(DataModel))]
 [JsonSerializable(typeof(IEnumerable<UserModel>))]
 [JsonSerializable(typeof(List<UserModel>))]
 [JsonSerializable(typeof(UserModel))]
+[JsonSerializable(typeof(DataModelResponse))]
+[JsonSerializable(typeof(UserModelResponse))]
+[JsonSerializable(typeof(MixedResponse))]
 internal partial class AppJsonSerializerContext : JsonSerializerContext
 {
 
