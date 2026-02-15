@@ -45,7 +45,7 @@ Install-Package JadeDbClient
 
 ## Usage
 
-Before we begin we need to let the plugin know what atabase we are using and where the plugin needs to connect to.
+Before we begin we need to let the plugin know what database we are using and where the plugin needs to connect to.
 
 To do this we need to add the following to the web.config or appsettings.json file.
 
@@ -195,7 +195,6 @@ public partial class Product
 When the database returns `DBNull`, the generated mapper assigns `null` for nullable types and appropriate defaults for non-nullable types.
 
 **Benefits of the Source Generator Approach:**
-- ✅ From 35 lines of boilerplate to a single `[JadeDbObject]` attribute
 - ✅ Works in .NET Native AOT (tested with SQL Server, MySQL, PostgreSQL)
 - ✅ Better performance (no reflection overhead)
 - ✅ Compile-time type safety
@@ -701,9 +700,6 @@ warning IL2104: Assembly 'System.Configuration.ConfigurationManager' produced tr
 - ✅ For dynamic scenarios, use standard JIT builds instead
 
 ## 📚 Documentation
-
-- **[Performance Guide](PERFORMANCE.md)** - Comprehensive performance analysis, benchmarks, and optimization tips
-- **[Security Audit](SECURITY_AUDIT.md)** - Security assessment and best practices
 - **[GitHub Repository](https://github.com/KaustavCodes/JadeDbClient-DotNet)** - Source code and issue tracker
 
 Happy Coding! 
