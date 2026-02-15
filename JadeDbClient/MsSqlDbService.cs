@@ -1,12 +1,8 @@
 using System.Data;
-using System.Collections.Generic;
-using System.Linq;
-using System.Threading.Tasks;
 using JadeDbClient.Interfaces;
 using JadeDbClient.Initialize;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Data.SqlClient;
-using System.Reflection;
 using System.Diagnostics.CodeAnalysis;
 
 namespace JadeDbClient;
@@ -20,7 +16,7 @@ public class MsSqlDbService : IDatabaseService
 
     public MsSqlDbService(IConfiguration configuration, JadeDbMapperOptions mapperOptions)
     {
-        _connectionString = configuration["ConnectionStrings:DbConnection"] 
+        _connectionString = configuration["ConnectionStrings:DbConnection"]
             ?? throw new InvalidOperationException("Connection string 'ConnectionStrings:DbConnection' not found in configuration.");
         _mapperOptions = mapperOptions ?? throw new ArgumentNullException(nameof(mapperOptions));
     }
@@ -85,7 +81,7 @@ public class MsSqlDbService : IDatabaseService
         for (int i = 0; i < reader.FieldCount; i++)
         {
             var columnName = reader.GetName(i);
-            
+
             if (propertyDict.TryGetValue(columnName, out var property) && !reader.IsDBNull(i))
             {
                 property.SetValue(instance, reader[i]);
@@ -400,7 +396,7 @@ public class MsSqlDbService : IDatabaseService
 
         return true;
     }
-    
+
     /// <summary>
     /// Bulk inserts a DataTable with JSON data into a SQL Server table.
     /// </summary>
@@ -413,7 +409,7 @@ public class MsSqlDbService : IDatabaseService
     {
         // Clone the structure and copy data, serializing JSON objects as needed
         var processedTable = dataTable.Clone();
-    
+
         foreach (DataRow row in dataTable.Rows)
         {
             var newRow = processedTable.NewRow();
@@ -440,10 +436,10 @@ public class MsSqlDbService : IDatabaseService
             }
             processedTable.Rows.Add(newRow);
         }
-    
+
         using var connection = new SqlConnection(_connectionString);
         await connection.OpenAsync();
-    
+
         using (var bulkCopy = new SqlBulkCopy(connection))
         {
             bulkCopy.DestinationTableName = tableName;
@@ -453,7 +449,7 @@ public class MsSqlDbService : IDatabaseService
             }
             await bulkCopy.WriteToServerAsync(processedTable);
         }
-    
+
         return true;
     }
 

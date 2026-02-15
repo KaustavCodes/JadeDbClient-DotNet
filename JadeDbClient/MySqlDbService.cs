@@ -1,12 +1,8 @@
 using System.Data;
-using System.Collections.Generic;
-using System.Linq;
-using System.Threading.Tasks;
 using JadeDbClient.Interfaces;
 using JadeDbClient.Initialize;
 using Microsoft.Extensions.Configuration;
 using MySqlConnector;
-using System.Reflection;
 using System.Diagnostics.CodeAnalysis;
 
 namespace JadeDbClient;
@@ -85,7 +81,7 @@ public class MySqlDbService : IDatabaseService
         for (int i = 0; i < reader.FieldCount; i++)
         {
             var columnName = reader.GetName(i);
-            
+
             if (propertyDict.TryGetValue(columnName, out var property) && !reader.IsDBNull(i))
             {
                 property.SetValue(instance, reader[i]);

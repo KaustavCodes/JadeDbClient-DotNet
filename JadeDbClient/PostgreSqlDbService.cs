@@ -1,12 +1,8 @@
 using System.Data;
-using System.Collections.Generic;
-using System.Linq;
-using System.Threading.Tasks;
 using JadeDbClient.Interfaces;
 using JadeDbClient.Initialize;
 using Microsoft.Extensions.Configuration;
 using Npgsql;
-using System.Reflection;
 using System.Diagnostics.CodeAnalysis;
 
 namespace JadeDbClient;
@@ -20,7 +16,7 @@ public class PostgreSqlDbService : IDatabaseService
 
     public PostgreSqlDbService(IConfiguration configuration, JadeDbMapperOptions mapperOptions)
     {
-        _connectionString = configuration["ConnectionStrings:DbConnection"] 
+        _connectionString = configuration["ConnectionStrings:DbConnection"]
             ?? throw new InvalidOperationException("Connection string 'ConnectionStrings:DbConnection' not found in configuration.");
         _mapperOptions = mapperOptions ?? throw new ArgumentNullException(nameof(mapperOptions));
     }
@@ -85,7 +81,7 @@ public class PostgreSqlDbService : IDatabaseService
         for (int i = 0; i < reader.FieldCount; i++)
         {
             var columnName = reader.GetName(i);
-            
+
             if (propertyDict.TryGetValue(columnName, out var property) && !reader.IsDBNull(i))
             {
                 property.SetValue(instance, reader[i]);
@@ -397,7 +393,7 @@ public class PostgreSqlDbService : IDatabaseService
 
         return true;
     }
-    
+
     /// <summary>
     /// Bulk inserts a DataTable with jsonObject into a PostgreSQL table.
     /// </summary>
@@ -410,10 +406,10 @@ public class PostgreSqlDbService : IDatabaseService
     {
         using var connection = new NpgsqlConnection(_connectionString);
         connection.Open();
-    
+
         using var writer = connection.BeginBinaryImport(
             $"COPY {tableName} ({string.Join(", ", dataTable.Columns.Cast<DataColumn>().Select(c => c.ColumnName))}) FROM STDIN (FORMAT BINARY)");
-    
+
         foreach (DataRow row in dataTable.Rows)
         {
             writer.StartRow();
@@ -442,9 +438,9 @@ public class PostgreSqlDbService : IDatabaseService
                 }
             }
         }
-    
+
         writer.Complete();
-    
+
         return true;
     }
 

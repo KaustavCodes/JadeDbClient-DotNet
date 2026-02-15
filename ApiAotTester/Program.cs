@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Http.HttpResults;
 using JadeDbClient.Initialize;
 using JadeDbClient.Interfaces;
 using System.Data;
+using JadeDbClient.Attributes;
 
 var builder = WebApplication.CreateSlimBuilder(args);
 
@@ -20,7 +21,7 @@ builder.Services.AddJadeDbService(options =>
         id = reader.GetInt32(reader.GetOrdinal("id")),
         name = reader.IsDBNull(reader.GetOrdinal("name")) ? null : reader.GetString(reader.GetOrdinal("name"))
     });
-    
+
     // UserModel will use automatic reflection mapping (testing fallback)
     // No mapper registered for UserModel - it will use reflection automatically
 });
@@ -101,9 +102,9 @@ app.MapGet("/test-aot-mapper", async (IDatabaseService dbConfig) =>
     // Using TOP for SQL Server compatibility (works in MsSql, ignored in PostgreSQL/MySQL)
     string query = "SELECT TOP 10 * FROM tbl_test;";
     IEnumerable<DataModel> results = await dbConfig.ExecuteQueryAsync<DataModel>(query);
-    
-    return Results.Ok(new 
-    { 
+
+    return Results.Ok(new
+    {
         message = "Using pre-compiled mapper for DataModel",
         count = results.Count(),
         data = results
@@ -117,9 +118,9 @@ app.MapGet("/test-aot-reflection", async (IDatabaseService dbConfig) =>
     // Should automatically fall back to reflection-based mapping
     string query = "SELECT TOP 10 id as UserId, name as UserName FROM tbl_test;";
     IEnumerable<UserModel> results = await dbConfig.ExecuteQueryAsync<UserModel>(query);
-    
-    return Results.Ok(new 
-    { 
+
+    return Results.Ok(new
+    {
         message = "Using automatic reflection for UserModel (no mapper registered)",
         count = results.Count(),
         data = results
@@ -132,13 +133,13 @@ app.MapGet("/test-aot-mixed", async (IDatabaseService dbConfig) =>
     // First query uses pre-compiled mapper
     string query1 = "SELECT TOP 5 * FROM tbl_test;";
     IEnumerable<DataModel> dataResults = await dbConfig.ExecuteQueryAsync<DataModel>(query1);
-    
+
     // Second query uses reflection fallback
     string query2 = "SELECT TOP 5 id as UserId, name as UserName FROM tbl_test;";
     IEnumerable<UserModel> userResults = await dbConfig.ExecuteQueryAsync<UserModel>(query2);
-    
-    return Results.Ok(new 
-    { 
+
+    return Results.Ok(new
+    {
         message = "Mixed usage: DataModel with mapper, UserModel with reflection",
         dataModelCount = dataResults.Count(),
         userModelCount = userResults.Count(),
@@ -157,7 +158,8 @@ public class DataModel
 }
 
 // UserModel does NOT have a pre-compiled mapper - uses reflection fallback
-public class UserModel
+[JadeDbObject]
+public partial class UserModel
 {
     public int UserId { get; set; }
     public string? UserName { get; set; }
