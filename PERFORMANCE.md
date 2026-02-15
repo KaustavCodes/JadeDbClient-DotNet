@@ -194,7 +194,7 @@ Total: ~150 MB
 | **Manual Registration** | ✅ **Yes*** | ✅ **Yes** | **Small** |
 | **Reflection** | ⚠️ **Limited** | ❌ **No** | **Largest** |
 
-*\*Note: JadeDbClient mapping is AOT-safe, but underlying drivers may satisfy AOT requirements to varying degrees.*
+**\*Important Note**: JadeDbClient's mapping logic is fully AOT-compatible when using Source Generator or Manual Registration. However, the underlying database driver packages (`Microsoft.Data.SqlClient`, `MySqlConnector`, `Npgsql`) may produce AOT warnings (e.g., `IL2104`, `IL3053`) during publish. These warnings are expected and originate from the drivers themselves, not JadeDbClient. Your application will still compile and run, but you should test thoroughly.
 
 ### AOT Performance Benefits
 
@@ -206,6 +206,14 @@ When publishing with Native AOT (`dotnet publish -c Release -r linux-x64`):
 - ✅ **30-50% less memory** usage at runtime
 - ✅ **Predictable performance** (no tiered compilation)
 - ✅ **Works in restricted environments** (iOS, WASM, embedded)
+
+**Expected Warnings**: During AOT publish, you may see trim/AOT warnings from database drivers. This is normal and expected:
+```
+warning IL2104: Assembly 'Microsoft.Data.SqlClient' produced trim warnings
+warning IL3053: Assembly 'Microsoft.Data.SqlClient' produced AOT analysis warnings
+warning IL2104: Assembly 'MySqlConnector' produced trim warnings
+```
+These warnings come from the database drivers, not JadeDbClient. Your application will still compile and run correctly.
 
 **Example Publish Sizes** (Simple API):
 - With Source Generator: **~8-12 MB**
@@ -326,11 +334,13 @@ public class User { ... }
 
 ### Framework Evolution (Next 5 Years)
 
-| Approach | .NET 8-10 | .NET 11+ | Native AOT | WASM | Mobile |
+| Approach | .NET 8-10 | .NET 11+ | Native AOT* | WASM | Mobile |
 |----------|-----------|----------|------------|------|--------|
-| **Source Generator** | ✅ Full | ✅ Full | ✅ Full | ✅ Full | ✅ Full |
-| **Manual** | ✅ Full | ✅ Full | ✅ Full | ✅ Full | ✅ Full |
+| **Source Generator** | ✅ Full | ✅ Full | ✅ Ready* | ✅ Ready* | ✅ Ready* |
+| **Manual** | ✅ Full | ✅ Full | ✅ Ready* | ✅ Ready* | ✅ Ready* |
 | **Reflection** | ✅ Full | ⚠️ Limited | ❌ Poor | ❌ Poor | ⚠️ Limited |
+
+**\*AOT/WASM/Mobile Note**: JadeDbClient is AOT-ready, but database driver compatibility varies. Expect warnings from providers during AOT publish. Test your specific scenario thoroughly.
 
 ### Technology Trends
 
@@ -421,6 +431,8 @@ public class User { ... }
 - 3 fewer pods × $50/pod = **$150/month saved**
 - Smaller images = faster deployments, less registry storage
 - Faster cold starts = better auto-scaling responsiveness
+
+**Note on AOT Warnings**: When publishing with Native AOT, expect trim/AOT warnings from database provider packages. These warnings are normal and don't prevent deployment. However, always test your specific use case in a staging environment before production deployment.
 
 ---
 

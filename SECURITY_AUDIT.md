@@ -7,16 +7,25 @@
 
 ## 🛰️ Architectural Assessment
 
-### AOT Maturity: ⭐⭐⭐⭐⭐ **Tier-1 AOT Compatibility Achieved**
+### AOT Maturity: ⭐⭐⭐⭐ **Strong AOT-Ready Design**
 
-**Achievement**: By moving the mapping logic to a Source Generator, JadeDbClient has achieved **Tier-1 AOT compatibility**. The library no longer "guesses" at runtime; it has hard-coded instructions for every model marked with `[JadeDbObject]`.
+**Achievement**: By moving the mapping logic to a Source Generator, JadeDbClient has achieved strong AOT-readiness for its core mapping functionality. The library no longer "guesses" at runtime; it has hard-coded instructions for every model marked with `[JadeDbObject]`.
 
-**Key Improvements**:
+**JadeDbClient AOT Capabilities**:
 - ✅ **Compile-Time Code Generation**: Mappers generated at build time, not runtime
 - ✅ **Zero Runtime Reflection** (for attributed models): No `Activator.CreateInstance` or `GetProperties()` calls
 - ✅ **ModuleInitializer Pattern**: Automatic registration via `[ModuleInitializer]` attribute
 - ✅ **Trimming-Safe**: No reflection-dependent code for AOT models
-- ✅ **Native AOT Ready**: Works seamlessly in NativeAOT-published applications
+- ✅ **Native AOT Ready**: JadeDbClient's mapping code works seamlessly in NativeAOT-published applications
+
+**Important Limitation - Database Driver Dependencies**:
+The underlying database provider packages have varying levels of AOT compatibility:
+- ⚠️ **Microsoft.Data.SqlClient**: Produces `IL2104` and `IL3053` warnings during AOT publish
+- ⚠️ **MySqlConnector**: Produces `IL2104` warnings during AOT publish
+- ⚠️ **Npgsql**: May produce trim/AOT warnings
+- ⚠️ **System.Configuration.ConfigurationManager**: Produces `IL2104` warnings
+
+These warnings are **expected and come from the database drivers**, not JadeDbClient itself. Applications will compile and run, but thorough testing in AOT mode is essential before production deployment.
 
 **Technical Implementation**:
 ```csharp
@@ -304,10 +313,35 @@ Stock = reader.IsDBNull(reader.GetOrdinal("Stock"))
 - ✅ **.NET Security Guidelines**: Follows Microsoft recommendations
 
 ### Framework Compatibility
-- ✅ **Native AOT**: Full support
+- ✅ **Native AOT**: JadeDbClient mapping layer fully supports Native AOT
+- ⚠️ **Database Drivers**: Underlying providers produce expected AOT warnings (see below)
 - ✅ **Trimming**: Source Generator friendly
 - ✅ **NullabilityContext**: C# 8+ nullability respected
 - ✅ **Async/Await**: Modern async patterns throughout
+
+### Native AOT - Expected Warnings
+
+When publishing with Native AOT, you will see warnings from database provider packages:
+
+```
+warning IL2104: Assembly 'Microsoft.Data.SqlClient' produced trim warnings
+warning IL3053: Assembly 'Microsoft.Data.SqlClient' produced AOT analysis warnings
+warning IL2104: Assembly 'MySqlConnector' produced trim warnings
+warning IL2104: Assembly 'System.Configuration.ConfigurationManager' produced trim warnings
+```
+
+**Understanding These Warnings**:
+- ✅ These are **expected** and come from database driver packages, not JadeDbClient
+- ✅ Your application **will compile and run** successfully
+- ✅ The warnings indicate the drivers use some reflection internally
+- ⚠️ **Testing Required**: Always test AOT builds thoroughly in a staging environment
+- ⚠️ **Driver Updates**: Check driver documentation for AOT compatibility improvements
+
+**Security Implications**:
+- No additional security risks introduced by these warnings
+- Database drivers are maintained by their respective vendors
+- JadeDbClient doesn't expose or worsen any driver limitations
+- Parameterization and security features work correctly in AOT mode
 
 ---
 
@@ -339,17 +373,25 @@ Stock = reader.IsDBNull(reader.GetOrdinal("Stock"))
 
 **Overall Assessment**: ✅ **APPROVED FOR PRODUCTION**
 
-JadeDbClient demonstrates **excellent security posture** and **cutting-edge AOT compatibility**. The Source Generator implementation represents a significant architectural achievement, placing the library in the top tier of .NET database clients for Native AOT applications.
+JadeDbClient demonstrates **excellent security posture** and **strong AOT-ready design**. The Source Generator implementation represents a significant architectural achievement, making JadeDbClient's mapping layer fully compatible with Native AOT applications.
 
 **Key Strengths**:
-- Tier-1 AOT compatibility through Source Generator
+- Strong AOT-ready design through Source Generator (JadeDbClient's code is AOT-safe)
 - Strong SQL injection protection through parameterization
 - Excellent developer experience (35 lines → 1 attribute)
 - Comprehensive null safety handling
 - Secure credential management practices
 - Industry-standard transaction support
 
-**No Critical Issues Found**: The library is production-ready with strong security fundamentals.
+**Known Limitations**:
+- Database provider packages (SqlClient, MySqlConnector, Npgsql) produce expected AOT warnings during publish
+- These warnings are outside JadeDbClient's control and originate from the driver packages
+- Applications compile and run successfully despite warnings
+- Thorough testing in AOT mode recommended before production deployment
+
+**Security Posture**: No critical security issues found. The library is production-ready with strong security fundamentals.
+
+**AOT Status**: JadeDbClient's mapping layer is AOT-ready. Driver limitations are expected and documented.
 
 ---
 

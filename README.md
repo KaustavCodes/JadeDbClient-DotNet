@@ -670,13 +670,31 @@ public class OrderService
 
 ## Native AOT Compatibility & Limitations
  
-**JadeDbClient** is designed to be AOT-friendly by using Source Generators to avoid runtime reflection for object mapping. This solves the primary AOT challenge in ORMs/micro-ORMs.
+**JadeDbClient** is designed to be AOT-friendly by using Source Generators to avoid runtime reflection for object mapping. The library's mapping layer is fully compatible with Native AOT.
  
- However, please note:
- 1. **Driver Limitations**: The underlying database drivers (`Microsoft.Data.SqlClient`, `MySqlConnector`, `Npgsql`) may still have limitations or produce warnings when compiled with Native AOT (e.g., `IL2104`, `IL3053`). These are outside of JadeDbClient's control.
- 2. **Reflection Fallback**: If you do *not* use `[JadeDbObject]`, the library falls back to reflection, which is **not** AOT-safe and will likely fail or require manual trimming configuration in AOT builds.
- 
- **Recommendation**: Always use `[JadeDbObject]` for your models in AOT applications to ensure mappers are generated at compile-time.
+However, please note:
+
+1. **Database Driver Limitations**: The underlying database drivers (`Microsoft.Data.SqlClient`, `MySqlConnector`, `Npgsql`) produce expected trim/AOT warnings during Native AOT publish (e.g., `IL2104`, `IL3053`). These warnings are:
+   - **Expected and documented** by the driver maintainers
+   - **Outside of JadeDbClient's control** - they originate from the driver packages
+   - **Not blocking** - your application will compile and run successfully
+   - **Requires testing** - always test AOT builds thoroughly before production
+
+2. **Reflection Fallback**: If you do *not* use `[JadeDbObject]`, the library falls back to reflection, which is **not** AOT-safe and will likely fail or require manual trimming configuration in AOT builds.
+
+**Example AOT Warnings You'll See**:
+```bash
+warning IL2104: Assembly 'Microsoft.Data.SqlClient' produced trim warnings
+warning IL3053: Assembly 'Microsoft.Data.SqlClient' produced AOT analysis warnings
+warning IL2104: Assembly 'MySqlConnector' produced trim warnings
+warning IL2104: Assembly 'System.Configuration.ConfigurationManager' produced trim warnings
+```
+
+**Recommendation**: 
+- ✅ Always use `[JadeDbObject]` for your models in AOT applications
+- ✅ Test your AOT build thoroughly in a staging environment
+- ✅ Monitor database driver releases for AOT compatibility improvements
+- ✅ Your application will work correctly despite the warnings
 
 ## 📚 Documentation
 
