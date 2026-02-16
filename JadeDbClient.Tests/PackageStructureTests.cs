@@ -42,6 +42,7 @@ public class PackageStructureTests
         Assert.Contains("GetParameter", methods);
         Assert.Contains("InsertDataTable", methods);
         Assert.Contains("InsertDataTableWithJsonData", methods);
+        Assert.Contains("BulkInsertAsync", methods);
         Assert.Contains("OpenConnection", methods);
         Assert.Contains("CloseConnection", methods);
     }
