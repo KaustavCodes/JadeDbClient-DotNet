@@ -1,3 +1,4 @@
+#nullable enable
 using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
@@ -130,7 +131,7 @@ namespace JadeDbClient.SourceGenerator
 
             sb.AppendLine($"        JadeDbMapperOptions.RegisterBulkInsertAccessor<{model.FullName}>(");
             sb.AppendLine($"            columnNames: new[] {{ {string.Join(", ", readableProps.Select(p => $"\"{p.Name}\""))} }},");
-            sb.AppendLine($"            accessor: (obj) => new object?[] {{ {string.Join(", ", readableProps.Select(p => $"obj.{p.Name}"))} }}");
+            sb.AppendLine($"            accessor: ({model.FullName} model_obj) => new object?[] {{ {string.Join(", ", readableProps.Select(p => $"model_obj.{p.Name}"))} }}");
             sb.AppendLine("        );");
         }
 

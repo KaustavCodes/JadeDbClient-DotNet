@@ -13,7 +13,8 @@
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="JadeDbClient" Version="1.2.1-bulktest" />
+    <ProjectReference Include="../JadeDbClient/JadeDbClient.csproj" />
+    <ProjectReference Include="../JadeDbClient.SourceGenerator/JadeDbClient.SourceGenerator.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
   </ItemGroup>
   
 </Project>
