@@ -105,7 +105,7 @@ public interface IDatabaseService
     /// <param name="dataTable">The DataTable to insert.</param>
     /// <param name="tableName">The target PostgreSQL table name.</param>
     Task<bool> InsertDataTable(string tableName, DataTable dataTable);
-    
+
     /// <summary>
     /// Bulk inserts a DataTable into a Database table with JsonDatas.
     /// </summary>

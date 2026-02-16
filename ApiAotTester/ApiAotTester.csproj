@@ -13,7 +13,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\JadeDbClient\JadeDbClient.csproj" />
+    <PackageReference Include="JadeDbClient" Version="1.2.1-bulktest" />
   </ItemGroup>
   
 </Project>

@@ -24,10 +24,12 @@ internal class Mapper
         // Try to use pre-compiled mapper first
         if (_mapperOptions.TryGetMapper<T>(out var mapper))
         {
+            Console.WriteLine($"[MAPPER] Using SOURCE GENERATOR mapper for {typeof(T).Name}");
             return mapper!(reader);
         }
 
         // Fall back to reflection-based mapping
+        Console.WriteLine($"[MAPPER] Falling back to REFLECTION for {typeof(T).Name}");
         return MapObjectReflection<T>(reader);
     }
 

@@ -70,7 +70,7 @@ Tests both approaches in a single request.
 #### PostgreSQL Bulk Insert Tests
 
 ##### `/test-postgres-bulk-insert`
-- **Method**: POST
+- **Method**: GET
 - **Purpose**: Tests `BulkInsertAsync` with `IEnumerable<T>` (reflection-free)
 - **Features**:
   - Uses native COPY BINARY protocol
@@ -78,7 +78,7 @@ Tests both approaches in a single request.
   - Demonstrates reflection-free property access via source generator
   
 ##### `/test-postgres-bulk-insert-stream`
-- **Method**: POST
+- **Method**: GET
 - **Purpose**: Tests `BulkInsertAsync` with `IAsyncEnumerable<T>` and progress reporting
 - **Features**:
   - Streaming insertion with progress callbacks
@@ -88,7 +88,7 @@ Tests both approaches in a single request.
 #### MySQL Bulk Insert Tests
 
 ##### `/test-mysql-bulk-insert`
-- **Method**: POST
+- **Method**: GET
 - **Purpose**: Tests optimized batched multi-value INSERT
 - **Features**:
   - Uses batched `INSERT INTO table VALUES (row1), (row2)...` statements
@@ -96,7 +96,7 @@ Tests both approaches in a single request.
   - Reflection-free with `[JadeDbObject]`
   
 ##### `/test-mysql-bulk-insert-stream`
-- **Method**: POST
+- **Method**: GET
 - **Purpose**: Tests async streaming with progress
 - **Features**:
   - Demonstrates IAsyncEnumerable support
@@ -106,7 +106,7 @@ Tests both approaches in a single request.
 #### SQL Server Bulk Insert Tests
 
 ##### `/test-mssql-bulk-insert`
-- **Method**: POST
+- **Method**: GET
 - **Purpose**: Tests SqlBulkCopy with reflection-free property access
 - **Features**:
   - Uses SqlBulkCopy for optimal performance
@@ -114,7 +114,7 @@ Tests both approaches in a single request.
   - Batch size configuration
   
 ##### `/test-mssql-bulk-insert-stream`
-- **Method**: POST
+- **Method**: GET
 - **Purpose**: Tests SqlBulkCopy with async streaming
 - **Features**:
   - IAsyncEnumerable support

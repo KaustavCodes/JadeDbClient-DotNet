@@ -437,10 +437,12 @@ public class MySqlDbService : IDatabaseService
         // Try to use generated accessor for reflection-free operation
         if (JadeDbMapperOptions.TryGetBulkInsertAccessor<T>(out var accessor) && accessor != null)
         {
+            Console.WriteLine($"[BULK INSERT] Using SOURCE GENERATOR accessor for {typeof(T).Name}");
             return await BulkInsertWithAccessorAsync(tableName, items, accessor, batchSize);
         }
 
         // Fallback to reflection-based approach
+        Console.WriteLine($"[BULK INSERT] Falling back to REFLECTION for {typeof(T).Name}");
         var properties = typeof(T).GetProperties().Where(p => p.CanRead).ToArray();
         if (properties.Length == 0) throw new InvalidOperationException($"Type {typeof(T).Name} has no readable properties");
 
@@ -457,7 +459,7 @@ public class MySqlDbService : IDatabaseService
             foreach (var item in items)
             {
                 batch.Add(item);
-                
+
                 if (batch.Count >= batchSize)
                 {
                     await InsertBatchAsync(connection, transaction, tableName, columnNames, properties, batch);
@@ -501,7 +503,7 @@ public class MySqlDbService : IDatabaseService
             foreach (var item in items)
             {
                 batch.Add(item);
-                
+
                 if (batch.Count >= batchSize)
                 {
                     await InsertBatchWithAccessorAsync(connection, transaction, tableName, columnNames, accessor, batch);
@@ -576,10 +578,12 @@ public class MySqlDbService : IDatabaseService
         // Try to use generated accessor for reflection-free operation
         if (JadeDbMapperOptions.TryGetBulkInsertAccessor<T>(out var accessor) && accessor != null)
         {
+            Console.WriteLine($"[BULK INSERT STREAM] Using SOURCE GENERATOR accessor for {typeof(T).Name}");
             return await BulkInsertWithAccessorAsync(tableName, items, accessor, progress, batchSize);
         }
 
         // Fallback to reflection-based approach
+        Console.WriteLine($"[BULK INSERT STREAM] Falling back to REFLECTION for {typeof(T).Name}");
         var properties = typeof(T).GetProperties().Where(p => p.CanRead).ToArray();
         if (properties.Length == 0) throw new InvalidOperationException($"Type {typeof(T).Name} has no readable properties");
 
@@ -596,7 +600,7 @@ public class MySqlDbService : IDatabaseService
             await foreach (var item in items)
             {
                 batch.Add(item);
-                
+
                 if (batch.Count >= batchSize)
                 {
                     await InsertBatchAsync(connection, transaction, tableName, columnNames, properties, batch);
@@ -642,7 +646,7 @@ public class MySqlDbService : IDatabaseService
             await foreach (var item in items)
             {
                 batch.Add(item);
-                
+
                 if (batch.Count >= batchSize)
                 {
                     await InsertBatchWithAccessorAsync(connection, transaction, tableName, columnNames, accessor, batch);
@@ -673,7 +677,7 @@ public class MySqlDbService : IDatabaseService
     /// <summary>
     /// Helper method to insert a batch of items using multi-value INSERT statement.
     /// </summary>
-    private async Task InsertBatchAsync<T>(MySqlConnection connection, MySqlTransaction transaction, 
+    private async Task InsertBatchAsync<T>(MySqlConnection connection, MySqlTransaction transaction,
         string tableName, string[] columnNames, System.Reflection.PropertyInfo[] properties, List<T> batch)
     {
         if (batch.Count == 0) return;
@@ -681,7 +685,7 @@ public class MySqlDbService : IDatabaseService
         var columnList = string.Join(", ", columnNames);
         var valuesList = new List<string>();
         var parameters = new List<MySqlParameter>();
-        
+
         for (int i = 0; i < batch.Count; i++)
         {
             var paramPlaceholders = new List<string>();
@@ -696,7 +700,7 @@ public class MySqlDbService : IDatabaseService
         }
 
         var insertQuery = $"INSERT INTO `{tableName}` ({columnList}) VALUES {string.Join(", ", valuesList)}";
-        
+
         using var command = new MySqlCommand(insertQuery, connection, transaction);
         command.Parameters.AddRange(parameters.ToArray());
         await command.ExecuteNonQueryAsync();

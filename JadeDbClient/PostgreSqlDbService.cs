@@ -414,10 +414,12 @@ public class PostgreSqlDbService : IDatabaseService
         // Try to use generated accessor for reflection-free operation
         if (JadeDbMapperOptions.TryGetBulkInsertAccessor<T>(out var accessor) && accessor != null)
         {
+            Console.WriteLine($"[BULK INSERT] Using SOURCE GENERATOR accessor for {typeof(T).Name}");
             return await BulkInsertWithAccessorAsync(tableName, items, accessor);
         }
 
         // Fallback to reflection-based approach
+        Console.WriteLine($"[BULK INSERT] Falling back to REFLECTION for {typeof(T).Name}");
         var properties = typeof(T).GetProperties().Where(p => p.CanRead).ToArray();
         if (properties.Length == 0) throw new InvalidOperationException($"Type {typeof(T).Name} has no readable properties");
 
@@ -489,10 +491,12 @@ public class PostgreSqlDbService : IDatabaseService
         // Try to use generated accessor for reflection-free operation
         if (JadeDbMapperOptions.TryGetBulkInsertAccessor<T>(out var accessor) && accessor != null)
         {
+            Console.WriteLine($"[BULK INSERT STREAM] Using SOURCE GENERATOR accessor for {typeof(T).Name}");
             return await BulkInsertWithAccessorAsync(tableName, items, accessor, progress, batchSize);
         }
 
         // Fallback to reflection-based approach
+        Console.WriteLine($"[BULK INSERT STREAM] Falling back to REFLECTION for {typeof(T).Name}");
         var properties = typeof(T).GetProperties().Where(p => p.CanRead).ToArray();
         if (properties.Length == 0) throw new InvalidOperationException($"Type {typeof(T).Name} has no readable properties");
 

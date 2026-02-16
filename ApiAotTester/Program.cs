@@ -151,14 +151,14 @@ app.MapGet("/test-aot-mixed", async (IDatabaseService dbConfig) =>
 // ========== BULK INSERT TESTS ==========
 
 // PostgreSQL Bulk Insert Tests
-app.MapPost("/test-postgres-bulk-insert", async (IDatabaseService dbConfig) =>
+app.MapGet("/test-postgres-bulk-insert", async (IDatabaseService dbConfig) =>
 {
     // Generate test data
     var products = GenerateTestProducts(100);
-    
+
     // Test bulk insert with IEnumerable (uses reflection-free path with [JadeDbObject])
     int rowsInserted = await dbConfig.BulkInsertAsync("products", products, batchSize: 50);
-    
+
     return Results.Ok(new BulkInsertResponse
     {
         message = "PostgreSQL bulk insert with IEnumerable (reflection-free with [JadeDbObject])",
@@ -169,17 +169,17 @@ app.MapPost("/test-postgres-bulk-insert", async (IDatabaseService dbConfig) =>
     });
 });
 
-app.MapPost("/test-postgres-bulk-insert-stream", async (IDatabaseService dbConfig) =>
+app.MapGet("/test-postgres-bulk-insert-stream", async (IDatabaseService dbConfig) =>
 {
     var progressValues = new List<int>();
     var progress = new Progress<int>(count => progressValues.Add(count));
-    
+
     // Generate async stream of test data
     var productStream = GenerateTestProductsAsync(200);
-    
+
     // Test bulk insert with IAsyncEnumerable and progress reporting
     int rowsInserted = await dbConfig.BulkInsertAsync("products", productStream, progress, batchSize: 50);
-    
+
     return Results.Ok(new BulkInsertStreamResponse
     {
         message = "PostgreSQL bulk insert with IAsyncEnumerable and progress (reflection-free)",
@@ -191,13 +191,13 @@ app.MapPost("/test-postgres-bulk-insert-stream", async (IDatabaseService dbConfi
 });
 
 // MySQL Bulk Insert Tests
-app.MapPost("/test-mysql-bulk-insert", async (IDatabaseService dbConfig) =>
+app.MapGet("/test-mysql-bulk-insert", async (IDatabaseService dbConfig) =>
 {
     var products = GenerateTestProducts(100);
-    
+
     // Test bulk insert with IEnumerable (optimized batched INSERT)
     int rowsInserted = await dbConfig.BulkInsertAsync("products", products, batchSize: 50);
-    
+
     return Results.Ok(new BulkInsertResponse
     {
         message = "MySQL bulk insert with batched multi-value INSERT (reflection-free)",
@@ -208,16 +208,16 @@ app.MapPost("/test-mysql-bulk-insert", async (IDatabaseService dbConfig) =>
     });
 });
 
-app.MapPost("/test-mysql-bulk-insert-stream", async (IDatabaseService dbConfig) =>
+app.MapGet("/test-mysql-bulk-insert-stream", async (IDatabaseService dbConfig) =>
 {
     var progressValues = new List<int>();
     var progress = new Progress<int>(count => progressValues.Add(count));
-    
+
     var productStream = GenerateTestProductsAsync(200);
-    
+
     // Test bulk insert with IAsyncEnumerable and progress
     int rowsInserted = await dbConfig.BulkInsertAsync("products", productStream, progress, batchSize: 50);
-    
+
     return Results.Ok(new BulkInsertStreamResponse
     {
         message = "MySQL bulk insert with IAsyncEnumerable and progress (batched INSERT)",
@@ -229,13 +229,13 @@ app.MapPost("/test-mysql-bulk-insert-stream", async (IDatabaseService dbConfig) 
 });
 
 // SQL Server Bulk Insert Tests
-app.MapPost("/test-mssql-bulk-insert", async (IDatabaseService dbConfig) =>
+app.MapGet("/test-mssql-bulk-insert", async (IDatabaseService dbConfig) =>
 {
     var products = GenerateTestProducts(100);
-    
+
     // Test bulk insert with IEnumerable (uses SqlBulkCopy)
     int rowsInserted = await dbConfig.BulkInsertAsync("products", products, batchSize: 50);
-    
+
     return Results.Ok(new BulkInsertResponse
     {
         message = "SQL Server bulk insert with SqlBulkCopy (reflection-free)",
@@ -246,16 +246,16 @@ app.MapPost("/test-mssql-bulk-insert", async (IDatabaseService dbConfig) =>
     });
 });
 
-app.MapPost("/test-mssql-bulk-insert-stream", async (IDatabaseService dbConfig) =>
+app.MapGet("/test-mssql-bulk-insert-stream", async (IDatabaseService dbConfig) =>
 {
     var progressValues = new List<int>();
     var progress = new Progress<int>(count => progressValues.Add(count));
-    
+
     var productStream = GenerateTestProductsAsync(200);
-    
+
     // Test bulk insert with IAsyncEnumerable and progress
     int rowsInserted = await dbConfig.BulkInsertAsync("products", productStream, progress, batchSize: 50);
-    
+
     return Results.Ok(new BulkInsertStreamResponse
     {
         message = "SQL Server bulk insert with IAsyncEnumerable and progress (SqlBulkCopy)",
@@ -274,7 +274,7 @@ static List<Product> GenerateTestProducts(int count)
 {
     var products = new List<Product>();
     var random = new Random();
-    
+
     for (int i = 1; i <= count; i++)
     {
         products.Add(new Product
@@ -285,14 +285,14 @@ static List<Product> GenerateTestProducts(int count)
             Stock = random.Next(0, 2) == 0 ? random.Next(1, 500) : null
         });
     }
-    
+
     return products;
 }
 
 static async IAsyncEnumerable<Product> GenerateTestProductsAsync(int count)
 {
     var random = new Random();
-    
+
     for (int i = 1; i <= count; i++)
     {
         await Task.Delay(1); // Simulate async operation
