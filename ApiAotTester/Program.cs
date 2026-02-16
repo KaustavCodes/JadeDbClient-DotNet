@@ -148,7 +148,165 @@ app.MapGet("/test-aot-mixed", async (IDatabaseService dbConfig) =>
     });
 });
 
+// ========== BULK INSERT TESTS ==========
+
+// PostgreSQL Bulk Insert Tests
+app.MapPost("/test-postgres-bulk-insert", async (IDatabaseService dbConfig) =>
+{
+    // Generate test data
+    var products = GenerateTestProducts(100);
+    
+    // Test bulk insert with IEnumerable (uses reflection-free path with [JadeDbObject])
+    int rowsInserted = await dbConfig.BulkInsertAsync("products", products, batchSize: 50);
+    
+    return Results.Ok(new BulkInsertResponse
+    {
+        message = "PostgreSQL bulk insert with IEnumerable (reflection-free with [JadeDbObject])",
+        database = "PostgreSQL",
+        rowsInserted = rowsInserted,
+        batchSize = 50,
+        totalItems = products.Count
+    });
+});
+
+app.MapPost("/test-postgres-bulk-insert-stream", async (IDatabaseService dbConfig) =>
+{
+    var progressValues = new List<int>();
+    var progress = new Progress<int>(count => progressValues.Add(count));
+    
+    // Generate async stream of test data
+    var productStream = GenerateTestProductsAsync(200);
+    
+    // Test bulk insert with IAsyncEnumerable and progress reporting
+    int rowsInserted = await dbConfig.BulkInsertAsync("products", productStream, progress, batchSize: 50);
+    
+    return Results.Ok(new BulkInsertStreamResponse
+    {
+        message = "PostgreSQL bulk insert with IAsyncEnumerable and progress (reflection-free)",
+        database = "PostgreSQL",
+        rowsInserted = rowsInserted,
+        batchSize = 50,
+        progressReports = progressValues
+    });
+});
+
+// MySQL Bulk Insert Tests
+app.MapPost("/test-mysql-bulk-insert", async (IDatabaseService dbConfig) =>
+{
+    var products = GenerateTestProducts(100);
+    
+    // Test bulk insert with IEnumerable (optimized batched INSERT)
+    int rowsInserted = await dbConfig.BulkInsertAsync("products", products, batchSize: 50);
+    
+    return Results.Ok(new BulkInsertResponse
+    {
+        message = "MySQL bulk insert with batched multi-value INSERT (reflection-free)",
+        database = "MySQL",
+        rowsInserted = rowsInserted,
+        batchSize = 50,
+        totalItems = products.Count
+    });
+});
+
+app.MapPost("/test-mysql-bulk-insert-stream", async (IDatabaseService dbConfig) =>
+{
+    var progressValues = new List<int>();
+    var progress = new Progress<int>(count => progressValues.Add(count));
+    
+    var productStream = GenerateTestProductsAsync(200);
+    
+    // Test bulk insert with IAsyncEnumerable and progress
+    int rowsInserted = await dbConfig.BulkInsertAsync("products", productStream, progress, batchSize: 50);
+    
+    return Results.Ok(new BulkInsertStreamResponse
+    {
+        message = "MySQL bulk insert with IAsyncEnumerable and progress (batched INSERT)",
+        database = "MySQL",
+        rowsInserted = rowsInserted,
+        batchSize = 50,
+        progressReports = progressValues
+    });
+});
+
+// SQL Server Bulk Insert Tests
+app.MapPost("/test-mssql-bulk-insert", async (IDatabaseService dbConfig) =>
+{
+    var products = GenerateTestProducts(100);
+    
+    // Test bulk insert with IEnumerable (uses SqlBulkCopy)
+    int rowsInserted = await dbConfig.BulkInsertAsync("products", products, batchSize: 50);
+    
+    return Results.Ok(new BulkInsertResponse
+    {
+        message = "SQL Server bulk insert with SqlBulkCopy (reflection-free)",
+        database = "MSSQL",
+        rowsInserted = rowsInserted,
+        batchSize = 50,
+        totalItems = products.Count
+    });
+});
+
+app.MapPost("/test-mssql-bulk-insert-stream", async (IDatabaseService dbConfig) =>
+{
+    var progressValues = new List<int>();
+    var progress = new Progress<int>(count => progressValues.Add(count));
+    
+    var productStream = GenerateTestProductsAsync(200);
+    
+    // Test bulk insert with IAsyncEnumerable and progress
+    int rowsInserted = await dbConfig.BulkInsertAsync("products", productStream, progress, batchSize: 50);
+    
+    return Results.Ok(new BulkInsertStreamResponse
+    {
+        message = "SQL Server bulk insert with IAsyncEnumerable and progress (SqlBulkCopy)",
+        database = "MSSQL",
+        rowsInserted = rowsInserted,
+        batchSize = 50,
+        progressReports = progressValues
+    });
+});
+
 app.Run();
+
+// ========== HELPER METHODS ==========
+
+static List<Product> GenerateTestProducts(int count)
+{
+    var products = new List<Product>();
+    var random = new Random();
+    
+    for (int i = 1; i <= count; i++)
+    {
+        products.Add(new Product
+        {
+            ProductId = i,
+            ProductName = $"Product_{i}",
+            Price = Math.Round((decimal)(random.NextDouble() * 1000), 2),
+            Stock = random.Next(0, 2) == 0 ? random.Next(1, 500) : null
+        });
+    }
+    
+    return products;
+}
+
+static async IAsyncEnumerable<Product> GenerateTestProductsAsync(int count)
+{
+    var random = new Random();
+    
+    for (int i = 1; i <= count; i++)
+    {
+        await Task.Delay(1); // Simulate async operation
+        yield return new Product
+        {
+            ProductId = i,
+            ProductName = $"StreamProduct_{i}",
+            Price = Math.Round((decimal)(random.NextDouble() * 1000), 2),
+            Stock = random.Next(0, 2) == 0 ? random.Next(1, 500) : null
+        };
+    }
+}
+
+// ========== MODELS ==========
 
 // DataModel has a pre-compiled mapper registered
 [JadeDbObject]
@@ -164,6 +322,16 @@ public partial class UserModel
 {
     public int UserId { get; set; }
     public string? UserName { get; set; }
+}
+
+// Product model for bulk insert tests (uses reflection-free source generator)
+[JadeDbObject]
+public partial class Product
+{
+    public int ProductId { get; set; }
+    public string ProductName { get; set; } = string.Empty;
+    public decimal Price { get; set; }
+    public int? Stock { get; set; }
 }
 
 public class DataModelResponse
@@ -189,15 +357,38 @@ public class MixedResponse
     public IEnumerable<UserModel> userModels { get; set; } = Array.Empty<UserModel>();
 }
 
+public class BulkInsertResponse
+{
+    public string message { get; set; } = "";
+    public string database { get; set; } = "";
+    public int rowsInserted { get; set; }
+    public int batchSize { get; set; }
+    public int totalItems { get; set; }
+}
+
+public class BulkInsertStreamResponse
+{
+    public string message { get; set; } = "";
+    public string database { get; set; } = "";
+    public int rowsInserted { get; set; }
+    public int batchSize { get; set; }
+    public List<int> progressReports { get; set; } = new();
+}
+
 [JsonSerializable(typeof(IEnumerable<DataModel>))]
 [JsonSerializable(typeof(List<DataModel>))]
 [JsonSerializable(typeof(DataModel))]
 [JsonSerializable(typeof(IEnumerable<UserModel>))]
 [JsonSerializable(typeof(List<UserModel>))]
 [JsonSerializable(typeof(UserModel))]
+[JsonSerializable(typeof(IEnumerable<Product>))]
+[JsonSerializable(typeof(List<Product>))]
+[JsonSerializable(typeof(Product))]
 [JsonSerializable(typeof(DataModelResponse))]
 [JsonSerializable(typeof(UserModelResponse))]
 [JsonSerializable(typeof(MixedResponse))]
+[JsonSerializable(typeof(BulkInsertResponse))]
+[JsonSerializable(typeof(BulkInsertStreamResponse))]
 internal partial class AppJsonSerializerContext : JsonSerializerContext
 {
 
