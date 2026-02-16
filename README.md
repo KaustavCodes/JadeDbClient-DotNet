@@ -457,6 +457,54 @@ Console.WriteLine($"Completed! Total rows inserted: {totalInserted}");
 
 #### Performance Benefits
 
+**Reflection-Free Mode (Recommended):**
+
+When you use `[JadeDbObject]` on your models, bulk insert operations become **reflection-free** and **AOT-compatible**:
+
+```csharp
+using JadeDbClient.Attributes;
+
+// Mark your model with [JadeDbObject] for maximum performance
+[JadeDbObject]
+public partial class Product
+{
+    public int ProductId { get; set; }
+    public string ProductName { get; set; }
+    public decimal Price { get; set; }
+    public int? Stock { get; set; }
+}
+
+// Source generator automatically creates property accessors
+// Bulk insert uses reflection-free path automatically
+var products = GetProducts();
+int inserted = await _dbConfig.BulkInsertAsync("Products", products);
+```
+
+**Benefits of Reflection-Free Mode:**
+- ✅ **Faster Initialization**: No `typeof(T).GetProperties()` calls
+- ✅ **Faster Property Access**: Direct property access via generated delegates
+- ✅ **AOT Compatible**: Works with .NET Native AOT
+- ✅ **Better Performance**: Eliminates reflection overhead
+- ✅ **Zero Configuration**: Just add `[JadeDbObject]` attribute
+
+**Fallback Mode:**
+
+Without `[JadeDbObject]`, bulk insert still works using reflection:
+
+```csharp
+// Works automatically, but uses reflection
+public class Product  // No [JadeDbObject] attribute
+{
+    public int ProductId { get; set; }
+    public string ProductName { get; set; }
+}
+
+// Still works, uses reflection fallback
+await _dbConfig.BulkInsertAsync("Products", products);
+```
+
+**Database-Specific Optimizations:**
+
 **PostgreSQL:**
 - Uses native COPY BINARY protocol
 - Extremely fast, direct streaming
@@ -484,11 +532,13 @@ Console.WriteLine($"Completed! Total rows inserted: {totalInserted}");
 
 #### When to Use Each Method
 
-| Method | Best For | Use Case |
-|--------|----------|----------|
-| **InsertDataTable** | Legacy code, DataTable sources | When you already have a DataTable |
-| **BulkInsertAsync (IEnumerable)** | In-memory collections | Bulk insert from lists, arrays, or collections |
-| **BulkInsertAsync (IAsyncEnumerable)** | Streaming sources | API responses, file readers, database streaming |
+| Method | Best For | Use Case | Performance |
+|--------|----------|----------|-------------|
+| **InsertDataTable** | Legacy code, DataTable sources | When you already have a DataTable | Good |
+| **BulkInsertAsync (IEnumerable)** | In-memory collections | Bulk insert from lists, arrays, or collections | Fast (Reflection-free with `[JadeDbObject]`) |
+| **BulkInsertAsync (IAsyncEnumerable)** | Streaming sources | API responses, file readers, database streaming | Fast (Reflection-free with `[JadeDbObject]`) |
+
+**Performance Tip:** Always use `[JadeDbObject]` on your models for best performance. The source generator creates reflection-free property accessors at compile time.
 
 ## Database Transactions
 

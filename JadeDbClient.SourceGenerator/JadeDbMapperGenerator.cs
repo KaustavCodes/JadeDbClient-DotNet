@@ -62,7 +62,8 @@ namespace JadeDbClient.SourceGenerator
                                     IsValueType: p.Type.IsValueType,
                                     IsNullable: p.NullableAnnotation == NullableAnnotation.Annotated,
                                     IsEnum: p.Type.TypeKind == TypeKind.Enum,
-                                    HasPublicSetter: p.SetMethod?.DeclaredAccessibility is Accessibility.Public or Accessibility.Internal
+                                    HasPublicSetter: p.SetMethod?.DeclaredAccessibility is Accessibility.Public or Accessibility.Internal,
+                                    HasPublicGetter: p.GetMethod?.DeclaredAccessibility is Accessibility.Public or Accessibility.Internal
                                 );
                             })
                             .ToImmutableArray();
@@ -123,7 +124,8 @@ namespace JadeDbClient.SourceGenerator
 
         private static void GenerateBulkInsertAccessor(StringBuilder sb, ModelToMap model)
         {
-            var readableProps = model.Properties.Where(p => p.HasPublicSetter).ToArray();
+            // For bulk insert, we need properties with public getters (to read values from objects)
+            var readableProps = model.Properties.Where(p => p.HasPublicGetter).ToArray();
             if (readableProps.Length == 0) return;
 
             sb.AppendLine($"        JadeDbMapperOptions.RegisterBulkInsertAccessor<{model.FullName}>(");
@@ -223,7 +225,8 @@ namespace JadeDbClient.SourceGenerator
             bool IsValueType,
             bool IsNullable,
             bool IsEnum,
-            bool HasPublicSetter);
+            bool HasPublicSetter,
+            bool HasPublicGetter);
 
         private record ModelToMap(
             string FullName,
