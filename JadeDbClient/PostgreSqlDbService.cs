@@ -399,6 +399,103 @@ public class PostgreSqlDbService : IDatabaseService
     }
 
     /// <summary>
+    /// Bulk inserts a collection of objects into a PostgreSQL table using streaming for memory efficiency.
+    /// </summary>
+    /// <typeparam name="T">The type of objects to insert. Properties should match database column names.</typeparam>
+    /// <param name="tableName">The target database table name.</param>
+    /// <param name="items">The collection of items to insert.</param>
+    /// <param name="batchSize">Number of records to insert per batch (default 1000).</param>
+    /// <returns>The total number of rows inserted.</returns>
+    public async Task<int> BulkInsertAsync<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicProperties)] T>(string tableName, IEnumerable<T> items, int batchSize = 1000)
+    {
+        if (items == null) throw new ArgumentNullException(nameof(items));
+        if (string.IsNullOrWhiteSpace(tableName)) throw new ArgumentException("Table name cannot be null or empty", nameof(tableName));
+
+        var properties = typeof(T).GetProperties().Where(p => p.CanRead).ToArray();
+        if (properties.Length == 0) throw new InvalidOperationException($"Type {typeof(T).Name} has no readable properties");
+
+        var columnNames = properties.Select(p => p.Name).ToArray();
+        int totalInserted = 0;
+
+        using var connection = new NpgsqlConnection(_connectionString);
+        await connection.OpenAsync();
+
+        // Use COPY command for efficient bulk insertion
+        using var writer = connection.BeginBinaryImport($"COPY {tableName} ({string.Join(", ", columnNames)}) FROM STDIN (FORMAT BINARY)");
+
+        foreach (var item in items)
+        {
+            writer.StartRow();
+            foreach (var property in properties)
+            {
+                var value = property.GetValue(item);
+                writer.Write(value ?? DBNull.Value);
+            }
+            totalInserted++;
+        }
+
+        await writer.CompleteAsync();
+        return totalInserted;
+    }
+
+    /// <summary>
+    /// Bulk inserts a stream of objects into a PostgreSQL table with progress reporting.
+    /// </summary>
+    /// <typeparam name="T">The type of objects to insert. Properties should match database column names.</typeparam>
+    /// <param name="tableName">The target database table name.</param>
+    /// <param name="items">The async enumerable stream of items to insert.</param>
+    /// <param name="progress">Optional progress reporter that receives the count of rows inserted.</param>
+    /// <param name="batchSize">Number of records to insert per batch (default 1000).</param>
+    /// <returns>The total number of rows inserted.</returns>
+    public async Task<int> BulkInsertAsync<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicProperties)] T>(string tableName, IAsyncEnumerable<T> items, IProgress<int>? progress = null, int batchSize = 1000)
+    {
+        if (items == null) throw new ArgumentNullException(nameof(items));
+        if (string.IsNullOrWhiteSpace(tableName)) throw new ArgumentException("Table name cannot be null or empty", nameof(tableName));
+
+        var properties = typeof(T).GetProperties().Where(p => p.CanRead).ToArray();
+        if (properties.Length == 0) throw new InvalidOperationException($"Type {typeof(T).Name} has no readable properties");
+
+        var columnNames = properties.Select(p => p.Name).ToArray();
+        int totalInserted = 0;
+        int batchCount = 0;
+
+        using var connection = new NpgsqlConnection(_connectionString);
+        await connection.OpenAsync();
+
+        // Use COPY command for efficient bulk insertion
+        using var writer = connection.BeginBinaryImport($"COPY {tableName} ({string.Join(", ", columnNames)}) FROM STDIN (FORMAT BINARY)");
+
+        await foreach (var item in items)
+        {
+            writer.StartRow();
+            foreach (var property in properties)
+            {
+                var value = property.GetValue(item);
+                writer.Write(value ?? DBNull.Value);
+            }
+            totalInserted++;
+            batchCount++;
+
+            // Report progress at batch intervals
+            if (progress != null && batchCount >= batchSize)
+            {
+                progress.Report(totalInserted);
+                batchCount = 0;
+            }
+        }
+
+        await writer.CompleteAsync();
+
+        // Report final progress
+        if (progress != null && batchCount > 0)
+        {
+            progress.Report(totalInserted);
+        }
+
+        return totalInserted;
+    }
+
+    /// <summary>
     /// Begins a database transaction.
     /// </summary>
     /// <returns>An IDbTransaction object representing the new transaction.</returns>

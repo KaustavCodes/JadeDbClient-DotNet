@@ -114,6 +114,27 @@ public interface IDatabaseService
     Task<bool> InsertDataTableWithJsonData(string tableName, DataTable dataTable);
 
     /// <summary>
+    /// Bulk inserts a collection of objects into a Database table using streaming for memory efficiency.
+    /// </summary>
+    /// <typeparam name="T">The type of objects to insert. Properties should match database column names.</typeparam>
+    /// <param name="tableName">The target database table name.</param>
+    /// <param name="items">The collection of items to insert.</param>
+    /// <param name="batchSize">Number of records to insert per batch (default 1000).</param>
+    /// <returns>The total number of rows inserted.</returns>
+    Task<int> BulkInsertAsync<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicProperties)] T>(string tableName, IEnumerable<T> items, int batchSize = 1000);
+
+    /// <summary>
+    /// Bulk inserts a stream of objects into a Database table with progress reporting.
+    /// </summary>
+    /// <typeparam name="T">The type of objects to insert. Properties should match database column names.</typeparam>
+    /// <param name="tableName">The target database table name.</param>
+    /// <param name="items">The async enumerable stream of items to insert.</param>
+    /// <param name="progress">Optional progress reporter that receives the count of rows inserted.</param>
+    /// <param name="batchSize">Number of records to insert per batch (default 1000).</param>
+    /// <returns>The total number of rows inserted.</returns>
+    Task<int> BulkInsertAsync<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicProperties)] T>(string tableName, IAsyncEnumerable<T> items, IProgress<int>? progress = null, int batchSize = 1000);
+
+    /// <summary>
     /// Begins a database transaction.
     /// </summary>
     /// <returns>An IDbTransaction object representing the new transaction.</returns>

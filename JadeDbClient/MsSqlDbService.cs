@@ -406,6 +406,151 @@ public class MsSqlDbService : IDatabaseService
     }
 
     /// <summary>
+    /// Bulk inserts a collection of objects into a SQL Server table using SqlBulkCopy.
+    /// </summary>
+    /// <typeparam name="T">The type of objects to insert. Properties should match database column names.</typeparam>
+    /// <param name="tableName">The target database table name.</param>
+    /// <param name="items">The collection of items to insert.</param>
+    /// <param name="batchSize">Number of records to insert per batch (default 1000).</param>
+    /// <returns>The total number of rows inserted.</returns>
+    public async Task<int> BulkInsertAsync<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicProperties)] T>(string tableName, IEnumerable<T> items, int batchSize = 1000)
+    {
+        if (items == null) throw new ArgumentNullException(nameof(items));
+        if (string.IsNullOrWhiteSpace(tableName)) throw new ArgumentException("Table name cannot be null or empty", nameof(tableName));
+
+        var properties = typeof(T).GetProperties().Where(p => p.CanRead).ToArray();
+        if (properties.Length == 0) throw new InvalidOperationException($"Type {typeof(T).Name} has no readable properties");
+
+        // Convert IEnumerable to DataTable
+        var dataTable = new DataTable();
+        foreach (var property in properties)
+        {
+            var columnType = Nullable.GetUnderlyingType(property.PropertyType) ?? property.PropertyType;
+            dataTable.Columns.Add(property.Name, columnType);
+        }
+
+        int totalInserted = 0;
+        foreach (var item in items)
+        {
+            var row = dataTable.NewRow();
+            foreach (var property in properties)
+            {
+                var value = property.GetValue(item);
+                row[property.Name] = value ?? DBNull.Value;
+            }
+            dataTable.Rows.Add(row);
+            totalInserted++;
+        }
+
+        using var connection = new SqlConnection(_connectionString);
+        await connection.OpenAsync();
+
+        using (var bulkCopy = new SqlBulkCopy(connection))
+        {
+            bulkCopy.DestinationTableName = tableName;
+            bulkCopy.BatchSize = batchSize;
+            
+            foreach (var property in properties)
+            {
+                bulkCopy.ColumnMappings.Add(property.Name, property.Name);
+            }
+
+            await bulkCopy.WriteToServerAsync(dataTable);
+        }
+
+        return totalInserted;
+    }
+
+    /// <summary>
+    /// Bulk inserts a stream of objects into a SQL Server table with progress reporting.
+    /// </summary>
+    /// <typeparam name="T">The type of objects to insert. Properties should match database column names.</typeparam>
+    /// <param name="tableName">The target database table name.</param>
+    /// <param name="items">The async enumerable stream of items to insert.</param>
+    /// <param name="progress">Optional progress reporter that receives the count of rows inserted.</param>
+    /// <param name="batchSize">Number of records to insert per batch (default 1000).</param>
+    /// <returns>The total number of rows inserted.</returns>
+    public async Task<int> BulkInsertAsync<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicProperties)] T>(string tableName, IAsyncEnumerable<T> items, IProgress<int>? progress = null, int batchSize = 1000)
+    {
+        if (items == null) throw new ArgumentNullException(nameof(items));
+        if (string.IsNullOrWhiteSpace(tableName)) throw new ArgumentException("Table name cannot be null or empty", nameof(tableName));
+
+        var properties = typeof(T).GetProperties().Where(p => p.CanRead).ToArray();
+        if (properties.Length == 0) throw new InvalidOperationException($"Type {typeof(T).Name} has no readable properties");
+
+        // Create DataTable structure
+        var dataTable = new DataTable();
+        foreach (var property in properties)
+        {
+            var columnType = Nullable.GetUnderlyingType(property.PropertyType) ?? property.PropertyType;
+            dataTable.Columns.Add(property.Name, columnType);
+        }
+
+        int totalInserted = 0;
+        int batchCount = 0;
+
+        using var connection = new SqlConnection(_connectionString);
+        await connection.OpenAsync();
+
+        await foreach (var item in items)
+        {
+            var row = dataTable.NewRow();
+            foreach (var property in properties)
+            {
+                var value = property.GetValue(item);
+                row[property.Name] = value ?? DBNull.Value;
+            }
+            dataTable.Rows.Add(row);
+            batchCount++;
+
+            // Insert batch when size is reached
+            if (batchCount >= batchSize)
+            {
+                using (var bulkCopy = new SqlBulkCopy(connection))
+                {
+                    bulkCopy.DestinationTableName = tableName;
+                    bulkCopy.BatchSize = batchSize;
+                    
+                    foreach (var property in properties)
+                    {
+                        bulkCopy.ColumnMappings.Add(property.Name, property.Name);
+                    }
+
+                    await bulkCopy.WriteToServerAsync(dataTable);
+                }
+
+                totalInserted += batchCount;
+                progress?.Report(totalInserted);
+                
+                dataTable.Rows.Clear();
+                batchCount = 0;
+            }
+        }
+
+        // Insert remaining items
+        if (batchCount > 0)
+        {
+            using (var bulkCopy = new SqlBulkCopy(connection))
+            {
+                bulkCopy.DestinationTableName = tableName;
+                bulkCopy.BatchSize = batchSize;
+                
+                foreach (var property in properties)
+                {
+                    bulkCopy.ColumnMappings.Add(property.Name, property.Name);
+                }
+
+                await bulkCopy.WriteToServerAsync(dataTable);
+            }
+
+            totalInserted += batchCount;
+            progress?.Report(totalInserted);
+        }
+
+        return totalInserted;
+    }
+
+    /// <summary>
     /// Begins a database transaction.
     /// </summary>
     /// <returns>An IDbTransaction object representing the new transaction.</returns>

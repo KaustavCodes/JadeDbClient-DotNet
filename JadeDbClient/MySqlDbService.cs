@@ -422,6 +422,151 @@ public class MySqlDbService : IDatabaseService
     }
 
     /// <summary>
+    /// Bulk inserts a collection of objects into a MySQL table using optimized batch inserts.
+    /// </summary>
+    /// <typeparam name="T">The type of objects to insert. Properties should match database column names.</typeparam>
+    /// <param name="tableName">The target database table name.</param>
+    /// <param name="items">The collection of items to insert.</param>
+    /// <param name="batchSize">Number of records to insert per batch (default 1000).</param>
+    /// <returns>The total number of rows inserted.</returns>
+    public async Task<int> BulkInsertAsync<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicProperties)] T>(string tableName, IEnumerable<T> items, int batchSize = 1000)
+    {
+        if (items == null) throw new ArgumentNullException(nameof(items));
+        if (string.IsNullOrWhiteSpace(tableName)) throw new ArgumentException("Table name cannot be null or empty", nameof(tableName));
+
+        var properties = typeof(T).GetProperties().Where(p => p.CanRead).ToArray();
+        if (properties.Length == 0) throw new InvalidOperationException($"Type {typeof(T).Name} has no readable properties");
+
+        var columnNames = properties.Select(p => $"`{p.Name}`").ToArray();
+        int totalInserted = 0;
+
+        using var connection = new MySqlConnection(_connectionString);
+        await connection.OpenAsync();
+        using var transaction = await connection.BeginTransactionAsync();
+
+        try
+        {
+            var batch = new List<T>();
+            foreach (var item in items)
+            {
+                batch.Add(item);
+                
+                if (batch.Count >= batchSize)
+                {
+                    await InsertBatchAsync(connection, transaction, tableName, columnNames, properties, batch);
+                    totalInserted += batch.Count;
+                    batch.Clear();
+                }
+            }
+
+            // Insert remaining items
+            if (batch.Count > 0)
+            {
+                await InsertBatchAsync(connection, transaction, tableName, columnNames, properties, batch);
+                totalInserted += batch.Count;
+            }
+
+            await transaction.CommitAsync();
+            return totalInserted;
+        }
+        catch
+        {
+            await transaction.RollbackAsync();
+            throw;
+        }
+    }
+
+    /// <summary>
+    /// Bulk inserts a stream of objects into a MySQL table with progress reporting.
+    /// </summary>
+    /// <typeparam name="T">The type of objects to insert. Properties should match database column names.</typeparam>
+    /// <param name="tableName">The target database table name.</param>
+    /// <param name="items">The async enumerable stream of items to insert.</param>
+    /// <param name="progress">Optional progress reporter that receives the count of rows inserted.</param>
+    /// <param name="batchSize">Number of records to insert per batch (default 1000).</param>
+    /// <returns>The total number of rows inserted.</returns>
+    public async Task<int> BulkInsertAsync<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicProperties)] T>(string tableName, IAsyncEnumerable<T> items, IProgress<int>? progress = null, int batchSize = 1000)
+    {
+        if (items == null) throw new ArgumentNullException(nameof(items));
+        if (string.IsNullOrWhiteSpace(tableName)) throw new ArgumentException("Table name cannot be null or empty", nameof(tableName));
+
+        var properties = typeof(T).GetProperties().Where(p => p.CanRead).ToArray();
+        if (properties.Length == 0) throw new InvalidOperationException($"Type {typeof(T).Name} has no readable properties");
+
+        var columnNames = properties.Select(p => $"`{p.Name}`").ToArray();
+        int totalInserted = 0;
+
+        using var connection = new MySqlConnection(_connectionString);
+        await connection.OpenAsync();
+        using var transaction = await connection.BeginTransactionAsync();
+
+        try
+        {
+            var batch = new List<T>();
+            await foreach (var item in items)
+            {
+                batch.Add(item);
+                
+                if (batch.Count >= batchSize)
+                {
+                    await InsertBatchAsync(connection, transaction, tableName, columnNames, properties, batch);
+                    totalInserted += batch.Count;
+                    progress?.Report(totalInserted);
+                    batch.Clear();
+                }
+            }
+
+            // Insert remaining items
+            if (batch.Count > 0)
+            {
+                await InsertBatchAsync(connection, transaction, tableName, columnNames, properties, batch);
+                totalInserted += batch.Count;
+                progress?.Report(totalInserted);
+            }
+
+            await transaction.CommitAsync();
+            return totalInserted;
+        }
+        catch
+        {
+            await transaction.RollbackAsync();
+            throw;
+        }
+    }
+
+    /// <summary>
+    /// Helper method to insert a batch of items using multi-value INSERT statement.
+    /// </summary>
+    private async Task InsertBatchAsync<T>(MySqlConnection connection, MySqlTransaction transaction, 
+        string tableName, string[] columnNames, System.Reflection.PropertyInfo[] properties, List<T> batch)
+    {
+        if (batch.Count == 0) return;
+
+        var columnList = string.Join(", ", columnNames);
+        var valuesList = new List<string>();
+        var parameters = new List<MySqlParameter>();
+        
+        for (int i = 0; i < batch.Count; i++)
+        {
+            var paramPlaceholders = new List<string>();
+            for (int j = 0; j < properties.Length; j++)
+            {
+                var paramName = $"@p{i}_{j}";
+                paramPlaceholders.Add(paramName);
+                var value = properties[j].GetValue(batch[i]);
+                parameters.Add(new MySqlParameter(paramName, value ?? DBNull.Value));
+            }
+            valuesList.Add($"({string.Join(", ", paramPlaceholders)})");
+        }
+
+        var insertQuery = $"INSERT INTO `{tableName}` ({columnList}) VALUES {string.Join(", ", valuesList)}";
+        
+        using var command = new MySqlCommand(insertQuery, connection, transaction);
+        command.Parameters.AddRange(parameters.ToArray());
+        await command.ExecuteNonQueryAsync();
+    }
+
+    /// <summary>
     /// Begins a database transaction.
     /// </summary>
     /// <returns>An IDbTransaction object representing the new transaction.</returns>
