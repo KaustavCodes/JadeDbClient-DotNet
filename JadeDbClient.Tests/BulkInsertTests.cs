@@ -206,10 +206,11 @@ public class BulkInsertTests
     {
         // Arrange
         var service = CreateTestService(databaseType);
+        var fixedDate = new DateTime(2025, 1, 1, 12, 0, 0, DateTimeKind.Utc);
         var items = new List<TestProduct>
         {
-            new TestProduct { Id = 1, Name = "Product1", Price = 10.99m, Stock = 100, CreatedAt = DateTime.Now },
-            new TestProduct { Id = 2, Name = "Product2", Price = 20.99m, Stock = null, CreatedAt = DateTime.Now }
+            new TestProduct { Id = 1, Name = "Product1", Price = 10.99m, Stock = 100, CreatedAt = fixedDate },
+            new TestProduct { Id = 2, Name = "Product2", Price = 20.99m, Stock = null, CreatedAt = fixedDate }
         };
 
         // Act - Verify method can handle nullable properties
@@ -295,6 +296,7 @@ public class BulkInsertTests
     // Helper methods
     private List<TestProduct> GenerateTestProducts(int count)
     {
+        var baseDate = new DateTime(2025, 1, 1, 12, 0, 0, DateTimeKind.Utc);
         var products = new List<TestProduct>();
         for (int i = 1; i <= count; i++)
         {
@@ -304,7 +306,7 @@ public class BulkInsertTests
                 Name = $"Product {i}",
                 Price = 10.99m * i,
                 Stock = i % 2 == 0 ? i * 10 : null,
-                CreatedAt = DateTime.Now.AddDays(-i)
+                CreatedAt = baseDate.AddDays(-i)
             });
         }
         return products;
@@ -312,6 +314,7 @@ public class BulkInsertTests
 
     private async IAsyncEnumerable<TestProduct> GenerateAsyncTestProducts(int count)
     {
+        var baseDate = new DateTime(2025, 1, 1, 12, 0, 0, DateTimeKind.Utc);
         for (int i = 1; i <= count; i++)
         {
             await Task.Delay(1); // Simulate async operation
@@ -321,7 +324,7 @@ public class BulkInsertTests
                 Name = $"Product {i}",
                 Price = 10.99m * i,
                 Stock = i % 2 == 0 ? i * 10 : null,
-                CreatedAt = DateTime.Now.AddDays(-i)
+                CreatedAt = baseDate.AddDays(-i)
             };
         }
     }

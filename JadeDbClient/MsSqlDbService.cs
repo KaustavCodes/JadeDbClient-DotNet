@@ -421,7 +421,7 @@ public class MsSqlDbService : IDatabaseService
         var properties = typeof(T).GetProperties().Where(p => p.CanRead).ToArray();
         if (properties.Length == 0) throw new InvalidOperationException($"Type {typeof(T).Name} has no readable properties");
 
-        // Convert IEnumerable to DataTable
+        // Create DataTable structure once
         var dataTable = new DataTable();
         foreach (var property in properties)
         {
@@ -430,6 +430,11 @@ public class MsSqlDbService : IDatabaseService
         }
 
         int totalInserted = 0;
+        int batchCount = 0;
+
+        using var connection = new SqlConnection(_connectionString);
+        await connection.OpenAsync();
+
         foreach (var item in items)
         {
             var row = dataTable.NewRow();
@@ -439,23 +444,23 @@ public class MsSqlDbService : IDatabaseService
                 row[property.Name] = value ?? DBNull.Value;
             }
             dataTable.Rows.Add(row);
-            totalInserted++;
+            batchCount++;
+
+            // Insert batch when size is reached
+            if (batchCount >= batchSize)
+            {
+                await ExecuteSqlBulkCopyAsync(connection, tableName, dataTable, properties, batchSize);
+                totalInserted += batchCount;
+                dataTable.Rows.Clear();
+                batchCount = 0;
+            }
         }
 
-        using var connection = new SqlConnection(_connectionString);
-        await connection.OpenAsync();
-
-        using (var bulkCopy = new SqlBulkCopy(connection))
+        // Insert remaining items
+        if (batchCount > 0)
         {
-            bulkCopy.DestinationTableName = tableName;
-            bulkCopy.BatchSize = batchSize;
-            
-            foreach (var property in properties)
-            {
-                bulkCopy.ColumnMappings.Add(property.Name, property.Name);
-            }
-
-            await bulkCopy.WriteToServerAsync(dataTable);
+            await ExecuteSqlBulkCopyAsync(connection, tableName, dataTable, properties, batchSize);
+            totalInserted += batchCount;
         }
 
         return totalInserted;
@@ -506,19 +511,7 @@ public class MsSqlDbService : IDatabaseService
             // Insert batch when size is reached
             if (batchCount >= batchSize)
             {
-                using (var bulkCopy = new SqlBulkCopy(connection))
-                {
-                    bulkCopy.DestinationTableName = tableName;
-                    bulkCopy.BatchSize = batchSize;
-                    
-                    foreach (var property in properties)
-                    {
-                        bulkCopy.ColumnMappings.Add(property.Name, property.Name);
-                    }
-
-                    await bulkCopy.WriteToServerAsync(dataTable);
-                }
-
+                await ExecuteSqlBulkCopyAsync(connection, tableName, dataTable, properties, batchSize);
                 totalInserted += batchCount;
                 progress?.Report(totalInserted);
                 
@@ -530,24 +523,30 @@ public class MsSqlDbService : IDatabaseService
         // Insert remaining items
         if (batchCount > 0)
         {
-            using (var bulkCopy = new SqlBulkCopy(connection))
-            {
-                bulkCopy.DestinationTableName = tableName;
-                bulkCopy.BatchSize = batchSize;
-                
-                foreach (var property in properties)
-                {
-                    bulkCopy.ColumnMappings.Add(property.Name, property.Name);
-                }
-
-                await bulkCopy.WriteToServerAsync(dataTable);
-            }
-
+            await ExecuteSqlBulkCopyAsync(connection, tableName, dataTable, properties, batchSize);
             totalInserted += batchCount;
             progress?.Report(totalInserted);
         }
 
         return totalInserted;
+    }
+
+    /// <summary>
+    /// Helper method to configure and execute SqlBulkCopy operation.
+    /// </summary>
+    private async Task ExecuteSqlBulkCopyAsync(SqlConnection connection, string tableName, 
+        DataTable dataTable, System.Reflection.PropertyInfo[] properties, int batchSize)
+    {
+        using var bulkCopy = new SqlBulkCopy(connection);
+        bulkCopy.DestinationTableName = tableName;
+        bulkCopy.BatchSize = batchSize;
+        
+        foreach (var property in properties)
+        {
+            bulkCopy.ColumnMappings.Add(property.Name, property.Name);
+        }
+
+        await bulkCopy.WriteToServerAsync(dataTable);
     }
 
     /// <summary>
