@@ -418,6 +418,13 @@ public class MsSqlDbService : IDatabaseService
         if (items == null) throw new ArgumentNullException(nameof(items));
         if (string.IsNullOrWhiteSpace(tableName)) throw new ArgumentException("Table name cannot be null or empty", nameof(tableName));
 
+        // Try to use generated accessor for reflection-free operation
+        if (JadeDbMapperOptions.TryGetBulkInsertAccessor<T>(out var accessor) && accessor != null)
+        {
+            return await BulkInsertWithAccessorAsync(tableName, items, accessor, batchSize);
+        }
+
+        // Fallback to reflection-based approach
         var properties = typeof(T).GetProperties().Where(p => p.CanRead).ToArray();
         if (properties.Length == 0) throw new InvalidOperationException($"Type {typeof(T).Name} has no readable properties");
 
@@ -467,6 +474,73 @@ public class MsSqlDbService : IDatabaseService
     }
 
     /// <summary>
+    /// Reflection-free bulk insert using generated accessor
+    /// </summary>
+    private async Task<int> BulkInsertWithAccessorAsync<T>(string tableName, IEnumerable<T> items, BulkInsertAccessor accessor, int batchSize)
+    {
+        // Create DataTable structure based on accessor columns
+        var dataTable = new DataTable();
+        foreach (var columnName in accessor.ColumnNames)
+        {
+            dataTable.Columns.Add(columnName, typeof(object)); // Use object type for flexibility
+        }
+
+        int totalInserted = 0;
+        int batchCount = 0;
+
+        using var connection = new SqlConnection(_connectionString);
+        await connection.OpenAsync();
+
+        foreach (var item in items)
+        {
+            var row = dataTable.NewRow();
+            var values = accessor.GetValues(item!);
+            for (int i = 0; i < values.Length; i++)
+            {
+                row[i] = values[i] ?? DBNull.Value;
+            }
+            dataTable.Rows.Add(row);
+            batchCount++;
+
+            // Insert batch when size is reached
+            if (batchCount >= batchSize)
+            {
+                await ExecuteSqlBulkCopyWithAccessorAsync(connection, tableName, dataTable, accessor.ColumnNames, batchSize);
+                totalInserted += batchCount;
+                dataTable.Rows.Clear();
+                batchCount = 0;
+            }
+        }
+
+        // Insert remaining items
+        if (batchCount > 0)
+        {
+            await ExecuteSqlBulkCopyWithAccessorAsync(connection, tableName, dataTable, accessor.ColumnNames, batchSize);
+            totalInserted += batchCount;
+        }
+
+        return totalInserted;
+    }
+
+    /// <summary>
+    /// Helper method for SqlBulkCopy with accessor (column names only)
+    /// </summary>
+    private async Task ExecuteSqlBulkCopyWithAccessorAsync(SqlConnection connection, string tableName,
+        DataTable dataTable, string[] columnNames, int batchSize)
+    {
+        using var bulkCopy = new SqlBulkCopy(connection);
+        bulkCopy.DestinationTableName = tableName;
+        bulkCopy.BatchSize = batchSize;
+
+        foreach (var columnName in columnNames)
+        {
+            bulkCopy.ColumnMappings.Add(columnName, columnName);
+        }
+
+        await bulkCopy.WriteToServerAsync(dataTable);
+    }
+
+    /// <summary>
     /// Bulk inserts a stream of objects into a SQL Server table with progress reporting.
     /// </summary>
     /// <typeparam name="T">The type of objects to insert. Properties should match database column names.</typeparam>
@@ -480,6 +554,13 @@ public class MsSqlDbService : IDatabaseService
         if (items == null) throw new ArgumentNullException(nameof(items));
         if (string.IsNullOrWhiteSpace(tableName)) throw new ArgumentException("Table name cannot be null or empty", nameof(tableName));
 
+        // Try to use generated accessor for reflection-free operation
+        if (JadeDbMapperOptions.TryGetBulkInsertAccessor<T>(out var accessor) && accessor != null)
+        {
+            return await BulkInsertWithAccessorAsync(tableName, items, accessor, progress, batchSize);
+        }
+
+        // Fallback to reflection-based approach
         var properties = typeof(T).GetProperties().Where(p => p.CanRead).ToArray();
         if (properties.Length == 0) throw new InvalidOperationException($"Type {typeof(T).Name} has no readable properties");
 
@@ -524,6 +605,58 @@ public class MsSqlDbService : IDatabaseService
         if (batchCount > 0)
         {
             await ExecuteSqlBulkCopyAsync(connection, tableName, dataTable, properties, batchSize);
+            totalInserted += batchCount;
+            progress?.Report(totalInserted);
+        }
+
+        return totalInserted;
+    }
+
+    /// <summary>
+    /// Reflection-free bulk insert using generated accessor with progress reporting
+    /// </summary>
+    private async Task<int> BulkInsertWithAccessorAsync<T>(string tableName, IAsyncEnumerable<T> items, BulkInsertAccessor accessor, IProgress<int>? progress, int batchSize)
+    {
+        // Create DataTable structure based on accessor columns
+        var dataTable = new DataTable();
+        foreach (var columnName in accessor.ColumnNames)
+        {
+            dataTable.Columns.Add(columnName, typeof(object));
+        }
+
+        int totalInserted = 0;
+        int batchCount = 0;
+
+        using var connection = new SqlConnection(_connectionString);
+        await connection.OpenAsync();
+
+        await foreach (var item in items)
+        {
+            var row = dataTable.NewRow();
+            var values = accessor.GetValues(item!);
+            for (int i = 0; i < values.Length; i++)
+            {
+                row[i] = values[i] ?? DBNull.Value;
+            }
+            dataTable.Rows.Add(row);
+            batchCount++;
+
+            // Insert batch when size is reached
+            if (batchCount >= batchSize)
+            {
+                await ExecuteSqlBulkCopyWithAccessorAsync(connection, tableName, dataTable, accessor.ColumnNames, batchSize);
+                totalInserted += batchCount;
+                progress?.Report(totalInserted);
+                
+                dataTable.Rows.Clear();
+                batchCount = 0;
+            }
+        }
+
+        // Insert remaining items
+        if (batchCount > 0)
+        {
+            await ExecuteSqlBulkCopyWithAccessorAsync(connection, tableName, dataTable, accessor.ColumnNames, batchSize);
             totalInserted += batchCount;
             progress?.Report(totalInserted);
         }

@@ -434,6 +434,13 @@ public class MySqlDbService : IDatabaseService
         if (items == null) throw new ArgumentNullException(nameof(items));
         if (string.IsNullOrWhiteSpace(tableName)) throw new ArgumentException("Table name cannot be null or empty", nameof(tableName));
 
+        // Try to use generated accessor for reflection-free operation
+        if (JadeDbMapperOptions.TryGetBulkInsertAccessor<T>(out var accessor) && accessor != null)
+        {
+            return await BulkInsertWithAccessorAsync(tableName, items, accessor, batchSize);
+        }
+
+        // Fallback to reflection-based approach
         var properties = typeof(T).GetProperties().Where(p => p.CanRead).ToArray();
         if (properties.Length == 0) throw new InvalidOperationException($"Type {typeof(T).Name} has no readable properties");
 
@@ -477,6 +484,82 @@ public class MySqlDbService : IDatabaseService
     }
 
     /// <summary>
+    /// Reflection-free bulk insert using generated accessor
+    /// </summary>
+    private async Task<int> BulkInsertWithAccessorAsync<T>(string tableName, IEnumerable<T> items, BulkInsertAccessor accessor, int batchSize)
+    {
+        var columnNames = accessor.ColumnNames.Select(c => $"`{c}`").ToArray();
+        int totalInserted = 0;
+
+        using var connection = new MySqlConnection(_connectionString);
+        await connection.OpenAsync();
+        using var transaction = await connection.BeginTransactionAsync();
+
+        try
+        {
+            var batch = new List<T>();
+            foreach (var item in items)
+            {
+                batch.Add(item);
+                
+                if (batch.Count >= batchSize)
+                {
+                    await InsertBatchWithAccessorAsync(connection, transaction, tableName, columnNames, accessor, batch);
+                    totalInserted += batch.Count;
+                    batch.Clear();
+                }
+            }
+
+            // Insert remaining items
+            if (batch.Count > 0)
+            {
+                await InsertBatchWithAccessorAsync(connection, transaction, tableName, columnNames, accessor, batch);
+                totalInserted += batch.Count;
+            }
+
+            await transaction.CommitAsync();
+            return totalInserted;
+        }
+        catch
+        {
+            await transaction.RollbackAsync();
+            throw;
+        }
+    }
+
+    /// <summary>
+    /// Helper method to insert a batch using accessor (reflection-free)
+    /// </summary>
+    private async Task InsertBatchWithAccessorAsync<T>(MySqlConnection connection, MySqlTransaction transaction,
+        string tableName, string[] columnNames, BulkInsertAccessor accessor, List<T> batch)
+    {
+        if (batch.Count == 0) return;
+
+        var columnList = string.Join(", ", columnNames);
+        var valuesList = new List<string>();
+        var parameters = new List<MySqlParameter>();
+
+        for (int i = 0; i < batch.Count; i++)
+        {
+            var values = accessor.GetValues(batch[i]!);
+            var paramPlaceholders = new List<string>();
+            for (int j = 0; j < values.Length; j++)
+            {
+                var paramName = $"@p{i}_{j}";
+                paramPlaceholders.Add(paramName);
+                parameters.Add(new MySqlParameter(paramName, values[j] ?? DBNull.Value));
+            }
+            valuesList.Add($"({string.Join(", ", paramPlaceholders)})");
+        }
+
+        var insertQuery = $"INSERT INTO `{tableName}` ({columnList}) VALUES {string.Join(", ", valuesList)}";
+
+        using var command = new MySqlCommand(insertQuery, connection, transaction);
+        command.Parameters.AddRange(parameters.ToArray());
+        await command.ExecuteNonQueryAsync();
+    }
+
+    /// <summary>
     /// Bulk inserts a stream of objects into a MySQL table with progress reporting.
     /// </summary>
     /// <typeparam name="T">The type of objects to insert. Properties should match database column names.</typeparam>
@@ -490,6 +573,13 @@ public class MySqlDbService : IDatabaseService
         if (items == null) throw new ArgumentNullException(nameof(items));
         if (string.IsNullOrWhiteSpace(tableName)) throw new ArgumentException("Table name cannot be null or empty", nameof(tableName));
 
+        // Try to use generated accessor for reflection-free operation
+        if (JadeDbMapperOptions.TryGetBulkInsertAccessor<T>(out var accessor) && accessor != null)
+        {
+            return await BulkInsertWithAccessorAsync(tableName, items, accessor, progress, batchSize);
+        }
+
+        // Fallback to reflection-based approach
         var properties = typeof(T).GetProperties().Where(p => p.CanRead).ToArray();
         if (properties.Length == 0) throw new InvalidOperationException($"Type {typeof(T).Name} has no readable properties");
 
@@ -520,6 +610,52 @@ public class MySqlDbService : IDatabaseService
             if (batch.Count > 0)
             {
                 await InsertBatchAsync(connection, transaction, tableName, columnNames, properties, batch);
+                totalInserted += batch.Count;
+                progress?.Report(totalInserted);
+            }
+
+            await transaction.CommitAsync();
+            return totalInserted;
+        }
+        catch
+        {
+            await transaction.RollbackAsync();
+            throw;
+        }
+    }
+
+    /// <summary>
+    /// Reflection-free bulk insert using generated accessor with progress reporting
+    /// </summary>
+    private async Task<int> BulkInsertWithAccessorAsync<T>(string tableName, IAsyncEnumerable<T> items, BulkInsertAccessor accessor, IProgress<int>? progress, int batchSize)
+    {
+        var columnNames = accessor.ColumnNames.Select(c => $"`{c}`").ToArray();
+        int totalInserted = 0;
+
+        using var connection = new MySqlConnection(_connectionString);
+        await connection.OpenAsync();
+        using var transaction = await connection.BeginTransactionAsync();
+
+        try
+        {
+            var batch = new List<T>();
+            await foreach (var item in items)
+            {
+                batch.Add(item);
+                
+                if (batch.Count >= batchSize)
+                {
+                    await InsertBatchWithAccessorAsync(connection, transaction, tableName, columnNames, accessor, batch);
+                    totalInserted += batch.Count;
+                    progress?.Report(totalInserted);
+                    batch.Clear();
+                }
+            }
+
+            // Insert remaining items
+            if (batch.Count > 0)
+            {
+                await InsertBatchWithAccessorAsync(connection, transaction, tableName, columnNames, accessor, batch);
                 totalInserted += batch.Count;
                 progress?.Report(totalInserted);
             }

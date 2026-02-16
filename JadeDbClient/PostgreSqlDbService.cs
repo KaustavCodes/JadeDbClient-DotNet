@@ -411,6 +411,13 @@ public class PostgreSqlDbService : IDatabaseService
         if (items == null) throw new ArgumentNullException(nameof(items));
         if (string.IsNullOrWhiteSpace(tableName)) throw new ArgumentException("Table name cannot be null or empty", nameof(tableName));
 
+        // Try to use generated accessor for reflection-free operation
+        if (JadeDbMapperOptions.TryGetBulkInsertAccessor<T>(out var accessor) && accessor != null)
+        {
+            return await BulkInsertWithAccessorAsync(tableName, items, accessor);
+        }
+
+        // Fallback to reflection-based approach
         var properties = typeof(T).GetProperties().Where(p => p.CanRead).ToArray();
         if (properties.Length == 0) throw new InvalidOperationException($"Type {typeof(T).Name} has no readable properties");
 
@@ -439,6 +446,33 @@ public class PostgreSqlDbService : IDatabaseService
     }
 
     /// <summary>
+    /// Reflection-free bulk insert using generated accessor
+    /// </summary>
+    private async Task<int> BulkInsertWithAccessorAsync<T>(string tableName, IEnumerable<T> items, BulkInsertAccessor accessor)
+    {
+        int totalInserted = 0;
+
+        using var connection = new NpgsqlConnection(_connectionString);
+        await connection.OpenAsync();
+
+        using var writer = connection.BeginBinaryImport($"COPY {tableName} ({string.Join(", ", accessor.ColumnNames)}) FROM STDIN (FORMAT BINARY)");
+
+        foreach (var item in items)
+        {
+            writer.StartRow();
+            var values = accessor.GetValues(item!);
+            foreach (var value in values)
+            {
+                writer.Write(value ?? DBNull.Value);
+            }
+            totalInserted++;
+        }
+
+        await writer.CompleteAsync();
+        return totalInserted;
+    }
+
+    /// <summary>
     /// Bulk inserts a stream of objects into a PostgreSQL table with progress reporting.
     /// </summary>
     /// <typeparam name="T">The type of objects to insert. Properties should match database column names.</typeparam>
@@ -452,6 +486,13 @@ public class PostgreSqlDbService : IDatabaseService
         if (items == null) throw new ArgumentNullException(nameof(items));
         if (string.IsNullOrWhiteSpace(tableName)) throw new ArgumentException("Table name cannot be null or empty", nameof(tableName));
 
+        // Try to use generated accessor for reflection-free operation
+        if (JadeDbMapperOptions.TryGetBulkInsertAccessor<T>(out var accessor) && accessor != null)
+        {
+            return await BulkInsertWithAccessorAsync(tableName, items, accessor, progress, batchSize);
+        }
+
+        // Fallback to reflection-based approach
         var properties = typeof(T).GetProperties().Where(p => p.CanRead).ToArray();
         if (properties.Length == 0) throw new InvalidOperationException($"Type {typeof(T).Name} has no readable properties");
 
@@ -471,6 +512,49 @@ public class PostgreSqlDbService : IDatabaseService
             foreach (var property in properties)
             {
                 var value = property.GetValue(item);
+                writer.Write(value ?? DBNull.Value);
+            }
+            totalInserted++;
+            batchCount++;
+
+            // Report progress at batch intervals
+            if (progress != null && batchCount >= batchSize)
+            {
+                progress.Report(totalInserted);
+                batchCount = 0;
+            }
+        }
+
+        await writer.CompleteAsync();
+
+        // Report final progress
+        if (progress != null && batchCount > 0)
+        {
+            progress.Report(totalInserted);
+        }
+
+        return totalInserted;
+    }
+
+    /// <summary>
+    /// Reflection-free bulk insert using generated accessor with progress reporting
+    /// </summary>
+    private async Task<int> BulkInsertWithAccessorAsync<T>(string tableName, IAsyncEnumerable<T> items, BulkInsertAccessor accessor, IProgress<int>? progress, int batchSize)
+    {
+        int totalInserted = 0;
+        int batchCount = 0;
+
+        using var connection = new NpgsqlConnection(_connectionString);
+        await connection.OpenAsync();
+
+        using var writer = connection.BeginBinaryImport($"COPY {tableName} ({string.Join(", ", accessor.ColumnNames)}) FROM STDIN (FORMAT BINARY)");
+
+        await foreach (var item in items)
+        {
+            writer.StartRow();
+            var values = accessor.GetValues(item!);
+            foreach (var value in values)
+            {
                 writer.Write(value ?? DBNull.Value);
             }
             totalInserted++;

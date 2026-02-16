@@ -108,6 +108,10 @@ namespace JadeDbClient.SourceGenerator
                     }
 
                     sb.AppendLine("        });");
+                    sb.AppendLine();
+
+                    // Generate bulk insert accessor for reflection-free bulk operations
+                    GenerateBulkInsertAccessor(sb, model);
                 }
 
                 sb.AppendLine("    }");
@@ -115,6 +119,17 @@ namespace JadeDbClient.SourceGenerator
 
                 spc.AddSource("JadeDbMapperInitializer.g.cs", SourceText.From(sb.ToString(), Encoding.UTF8));
             });
+        }
+
+        private static void GenerateBulkInsertAccessor(StringBuilder sb, ModelToMap model)
+        {
+            var readableProps = model.Properties.Where(p => p.HasPublicSetter).ToArray();
+            if (readableProps.Length == 0) return;
+
+            sb.AppendLine($"        JadeDbMapperOptions.RegisterBulkInsertAccessor<{model.FullName}>(");
+            sb.AppendLine($"            columnNames: new[] {{ {string.Join(", ", readableProps.Select(p => $"\"{p.Name}\""))} }},");
+            sb.AppendLine($"            accessor: (obj) => new object?[] {{ {string.Join(", ", readableProps.Select(p => $"obj.{p.Name}"))} }}");
+            sb.AppendLine("        );");
         }
 
         private static string? GetMappingExpression(PropertyToMap p)

@@ -9,6 +9,9 @@ public class JadeDbMapperOptions
     // 🚀 The static "Bridge": Source Generator drops mappers here at startup
     internal static readonly Dictionary<Type, Func<IDataReader, object>> GlobalMappers = new();
 
+    // 🚀 Property accessors for bulk insert operations (reflection-free)
+    internal static readonly Dictionary<Type, BulkInsertAccessor> GlobalBulkInsertAccessors = new();
+
     internal readonly Dictionary<Type, Func<IDataReader, object>> Mappers = new();
 
     public JadeDbMapperOptions()
@@ -56,5 +59,32 @@ public class JadeDbMapperOptions
         }
         mapper = null;
         return false;
+    }
+
+    // Public method for registering bulk insert accessors (used by source generator)
+    public static void RegisterBulkInsertAccessor<T>(string[] columnNames, Func<T, object?[]> accessor)
+    {
+        GlobalBulkInsertAccessors[typeof(T)] = new BulkInsertAccessor(columnNames, obj => accessor((T)obj));
+    }
+
+    // Internal method to try getting bulk insert accessor
+    public static bool TryGetBulkInsertAccessor<T>(out BulkInsertAccessor? accessor)
+    {
+        return GlobalBulkInsertAccessors.TryGetValue(typeof(T), out accessor);
+    }
+}
+
+/// <summary>
+/// Holds reflection-free property accessor information for bulk insert operations
+/// </summary>
+public class BulkInsertAccessor
+{
+    public string[] ColumnNames { get; }
+    public Func<object, object?[]> GetValues { get; }
+
+    public BulkInsertAccessor(string[] columnNames, Func<object, object?[]> getValues)
+    {
+        ColumnNames = columnNames;
+        GetValues = getValues;
     }
 }

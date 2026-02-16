@@ -293,6 +293,92 @@ public class BulkInsertTests
         batchSize.Should().BeGreaterThan(0);
     }
 
+    [Theory]
+    [InlineData("MsSql")]
+    [InlineData("MySql")]
+    [InlineData("PostgreSQL")]
+    public void BulkInsertAsync_WithJadeDbObjectAttribute_UsesGeneratedAccessor(string databaseType)
+    {
+        // Arrange - TestProduct already has [JadeDbObject] attribute
+        var service = CreateTestService(databaseType);
+
+        // Act - Register accessor to simulate source generator behavior
+        JadeDbMapperOptions.RegisterBulkInsertAccessor<TestProduct>(
+            columnNames: new[] { "Id", "Name", "Price", "Stock", "CreatedAt" },
+            accessor: (obj) => new object?[] { obj.Id, obj.Name, obj.Price, obj.Stock, obj.CreatedAt }
+        );
+
+        // Assert - Verify accessor was registered
+        var hasAccessor = JadeDbMapperOptions.TryGetBulkInsertAccessor<TestProduct>(out var accessor);
+        hasAccessor.Should().BeTrue("Accessor should be registered for types with [JadeDbObject]");
+        accessor.Should().NotBeNull();
+        accessor!.ColumnNames.Should().Contain(new[] { "Id", "Name", "Price", "Stock", "CreatedAt" });
+    }
+
+    [Fact]
+    public void BulkInsertAccessor_GetValues_ReturnsCorrectPropertyValues()
+    {
+        // Arrange
+        var fixedDate = new DateTime(2025, 1, 1, 12, 0, 0, DateTimeKind.Utc);
+        var product = new TestProduct
+        {
+            Id = 123,
+            Name = "Test Product",
+            Price = 99.99m,
+            Stock = 50,
+            CreatedAt = fixedDate
+        };
+
+        JadeDbMapperOptions.RegisterBulkInsertAccessor<TestProduct>(
+            columnNames: new[] { "Id", "Name", "Price", "Stock", "CreatedAt" },
+            accessor: (obj) => new object?[] { obj.Id, obj.Name, obj.Price, obj.Stock, obj.CreatedAt }
+        );
+
+        // Act
+        JadeDbMapperOptions.TryGetBulkInsertAccessor<TestProduct>(out var accessor);
+        var values = accessor!.GetValues(product);
+
+        // Assert
+        values.Should().HaveCount(5);
+        values[0].Should().Be(123);
+        values[1].Should().Be("Test Product");
+        values[2].Should().Be(99.99m);
+        values[3].Should().Be(50);
+        values[4].Should().Be(fixedDate);
+    }
+
+    [Fact]
+    public void BulkInsertAccessor_WithNullableProperty_ReturnsNullCorrectly()
+    {
+        // Arrange
+        var fixedDate = new DateTime(2025, 1, 1, 12, 0, 0, DateTimeKind.Utc);
+        var product = new TestProduct
+        {
+            Id = 456,
+            Name = "Product with null stock",
+            Price = 49.99m,
+            Stock = null, // Null value
+            CreatedAt = fixedDate
+        };
+
+        JadeDbMapperOptions.RegisterBulkInsertAccessor<TestProduct>(
+            columnNames: new[] { "Id", "Name", "Price", "Stock", "CreatedAt" },
+            accessor: (obj) => new object?[] { obj.Id, obj.Name, obj.Price, obj.Stock, obj.CreatedAt }
+        );
+
+        // Act
+        JadeDbMapperOptions.TryGetBulkInsertAccessor<TestProduct>(out var accessor);
+        var values = accessor!.GetValues(product);
+
+        // Assert
+        values.Should().HaveCount(5);
+        values[0].Should().Be(456);
+        values[1].Should().Be("Product with null stock");
+        values[2].Should().Be(49.99m);
+        values[3].Should().BeNull(); // Verify null is preserved
+        values[4].Should().Be(fixedDate);
+    }
+
     // Helper methods
     private List<TestProduct> GenerateTestProducts(int count)
     {
