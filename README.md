@@ -870,47 +870,6 @@ warning IL2104: Assembly 'System.Configuration.ConfigurationManager' produced tr
 
 Happy Coding! 
 
-## Performance and Security
-
-### 📊 Performance Report
-
-JadeDbClient includes comprehensive performance testing and benchmarking capabilities. For detailed performance analysis, metrics, and best practices, see:
-
-**[📄 PERFORMANCE_REPORT.md](PERFORMANCE_REPORT.md)** - *Done by GitHub Copilot Agent (Feb 17, 2026)*
-
-**Key Performance Highlights:**
-- **Bulk Insert:** 1.5-10x faster than legacy approaches (database-dependent)
-- **Reflection-Free:** 15-30% improvement with `[JadeDbObject]` attribute
-- **Memory Efficient:** Streaming support for unlimited dataset sizes
-- **Production Ready:** Logging disabled by default for optimal performance
-
-**Benchmark Results (1000 records):**
-- PostgreSQL: 2-3x faster with reflection-free COPY BINARY
-- MySQL: 5-10x faster with batched multi-value INSERT
-- SQL Server: 1.5-2x faster with reflection-free SqlBulkCopy
-
-### 🔒 Security Audit
-
-JadeDbClient has undergone a thorough security review. For the complete security audit, vulnerability assessment, and secure usage guidelines, see:
-
-**[📄 SECURITY_REPORT.md](SECURITY_REPORT.md)** - *Done by GitHub Copilot Agent (Feb 17, 2026)*
-
-**Security Rating:** ✅ **GOOD**
-
-**Key Security Features:**
-- ✅ SQL Injection Prevention (all queries use parameterized queries)
-- ✅ Secure Defaults (logging disabled, no sensitive data exposure)
-- ✅ Input Validation (null checks, type safety)
-- ✅ Encrypted Connections (TLS/SSL support via connection strings)
-- ✅ No Critical or High-severity vulnerabilities
-
-**Security Best Practices:**
-- Use encrypted database connections (TLS/SSL)
-- Store connection strings securely (Azure Key Vault, environment variables)
-- Implement least privilege database access
-- Keep logging disabled in production
-- Update dependencies regularly
-
 ## License
 
 This project is licensed under the MIT License.
