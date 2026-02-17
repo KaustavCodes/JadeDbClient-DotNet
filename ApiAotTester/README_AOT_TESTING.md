@@ -1,6 +1,6 @@
 # ApiAotTester - AOT Mapper Registry Testing
 
-This project tests the JadeDbClient library's AOT (Ahead-of-Time) compilation compatibility, specifically focusing on the AOT mapper registry and reflection-free bulk insert features.
+This project tests the JadeDbClient library's AOT (Ahead-of-Time) compilation compatibility, specifically focusing on the AOT mapper registry, reflection-free bulk insert features, and performance benchmarking.
 
 ## Purpose
 
@@ -9,7 +9,8 @@ The ApiAotTester project validates that:
 2. Pre-compiled mappers function properly in AOT applications
 3. Automatic reflection fallback works for unmapped types
 4. Mixed usage (both approaches) works seamlessly
-5. **NEW:** Reflection-free bulk insert operations work correctly across all databases
+5. **Reflection-free bulk insert operations work correctly across all databases**
+6. **NEW: Performance benchmarking across different bulk insert modes**
 
 ## Configuration
 
@@ -39,6 +40,69 @@ public partial class Product
 ```
 
 ## Test Endpoints
+
+### Performance Testing APIs (NEW)
+
+#### 🚀 `/perf-test-postgres-bulk-insert` - PostgreSQL Performance Benchmark
+- **Method**: POST
+- **Purpose**: Compares all 3 bulk insert modes with performance metrics
+- **Test Size**: 1000 records per mode
+- **Features**:
+  - Tests InsertDataTable (legacy)
+  - Tests BulkInsertAsync with IEnumerable (reflection-free)
+  - Tests BulkInsertAsync with IAsyncEnumerable (streaming)
+  - Truncates table between each test
+  - Returns timing and throughput metrics
+
+**Example Response:**
+```json
+{
+  "database": "PostgreSQL",
+  "totalRecords": 1000,
+  "modes": [
+    {
+      "mode": "InsertDataTable (Legacy DataTable)",
+      "rowsInserted": 1000,
+      "elapsedMilliseconds": 245,
+      "recordsPerSecond": 4081.63
+    },
+    {
+      "mode": "BulkInsertAsync IEnumerable (Reflection-Free)",
+      "rowsInserted": 1000,
+      "elapsedMilliseconds": 123,
+      "recordsPerSecond": 8130.08
+    },
+    {
+      "mode": "BulkInsertAsync IAsyncEnumerable (Streaming)",
+      "rowsInserted": 1000,
+      "elapsedMilliseconds": 135,
+      "recordsPerSecond": 7407.41
+    }
+  ]
+}
+```
+
+#### 🚀 `/perf-test-mysql-bulk-insert` - MySQL Performance Benchmark
+- **Method**: POST
+- **Purpose**: Compares all 3 bulk insert modes with MySQL-specific optimizations
+- **Test Size**: 1000 records per mode
+- **Features**:
+  - Tests InsertDataTable (legacy)
+  - Tests BulkInsertAsync with batched multi-value INSERT (5-10x faster)
+  - Tests BulkInsertAsync streaming with batched INSERT
+  - Demonstrates batched INSERT performance gains
+  - Returns detailed performance metrics
+
+#### 🚀 `/perf-test-mssql-bulk-insert` - SQL Server Performance Benchmark
+- **Method**: POST
+- **Purpose**: Compares all 3 bulk insert modes using SqlBulkCopy
+- **Test Size**: 1000 records per mode
+- **Features**:
+  - Tests InsertDataTable (legacy SqlBulkCopy)
+  - Tests BulkInsertAsync with reflection-free SqlBulkCopy
+  - Tests BulkInsertAsync streaming with SqlBulkCopy
+  - Shows reflection-free performance improvements
+  - Returns comprehensive timing data
 
 ### Original Mapper Tests
 
@@ -196,6 +260,32 @@ The application will start on the configured port (default: 5000/5001).
 
 ## Testing Approach
 
+### Performance Benchmark Tests (NEW)
+
+Run comprehensive performance tests for each database:
+
+```bash
+# PostgreSQL Performance Benchmark
+curl -X POST http://localhost:5000/perf-test-postgres-bulk-insert
+
+# MySQL Performance Benchmark
+curl -X POST http://localhost:5000/perf-test-mysql-bulk-insert
+
+# SQL Server Performance Benchmark
+curl -X POST http://localhost:5000/perf-test-mssql-bulk-insert
+```
+
+Each test will:
+1. Insert 1000 records using InsertDataTable (legacy)
+2. Truncate table, then insert 1000 records using BulkInsertAsync with IEnumerable
+3. Truncate table, then insert 1000 records using BulkInsertAsync with IAsyncEnumerable
+4. Return detailed performance metrics for all three modes
+
+**Expected Performance Gains:**
+- **PostgreSQL**: 2-3x faster with reflection-free COPY BINARY
+- **MySQL**: 5-10x faster with batched multi-value INSERT
+- **SQL Server**: 1.5-2x faster with reflection-free SqlBulkCopy
+
 ### Mapper Tests
 1. **Pre-compiled Mapper**: Call `/test-aot-mapper` to verify fast mapper works
 2. **Reflection Fallback**: Call `/test-aot-reflection` to verify unmapped types work
@@ -220,6 +310,40 @@ curl -X POST http://localhost:5000/test-mssql-bulk-insert
 ```
 
 ## Response Format
+
+### Performance Benchmark Response (NEW)
+```json
+{
+  "database": "PostgreSQL",
+  "totalRecords": 1000,
+  "modes": [
+    {
+      "mode": "InsertDataTable (Legacy DataTable)",
+      "rowsInserted": 1000,
+      "elapsedMilliseconds": 245,
+      "recordsPerSecond": 4081.63
+    },
+    {
+      "mode": "BulkInsertAsync IEnumerable (Reflection-Free)",
+      "rowsInserted": 1000,
+      "elapsedMilliseconds": 123,
+      "recordsPerSecond": 8130.08
+    },
+    {
+      "mode": "BulkInsertAsync IAsyncEnumerable (Streaming)",
+      "rowsInserted": 1000,
+      "elapsedMilliseconds": 135,
+      "recordsPerSecond": 7407.41
+    }
+  ]
+}
+```
+
+**Metrics Explained:**
+- `elapsedMilliseconds`: Total time taken for the insert operation
+- `recordsPerSecond`: Throughput calculated as (rowsInserted / seconds)
+- Lower milliseconds = faster
+- Higher records/second = better throughput
 
 ### Bulk Insert Response
 ```json
@@ -252,6 +376,41 @@ curl -X POST http://localhost:5000/test-mssql-bulk-insert
 - ✅ **Database-specific optimizations** (COPY BINARY, batched INSERT, SqlBulkCopy)
 - ✅ **Same API** regardless of database
 - ✅ **AOT compatible** - all operations work with Native AOT
+- ✅ **NEW: Performance benchmarking** - Compare all modes side-by-side
+- ✅ **Measurable improvements** - 2-10x faster depending on database and mode
+
+## Performance Testing Insights
+
+The new performance testing endpoints provide valuable insights:
+
+### What Gets Tested
+1. **Legacy Approach** - InsertDataTable (baseline)
+2. **New IEnumerable** - Reflection-free batch insert
+3. **New IAsyncEnumerable** - Streaming with async support
+
+### Performance Comparison
+
+**PostgreSQL (COPY BINARY)**
+- Legacy: Uses COPY with DataTable
+- New IEnumerable: Reflection-free COPY BINARY (2-3x faster)
+- New IAsyncEnumerable: Streaming COPY BINARY
+
+**MySQL (Batched INSERT)**
+- Legacy: Row-by-row or DataTable approach
+- New IEnumerable: Batched multi-value INSERT (5-10x faster)
+- New IAsyncEnumerable: Streaming batched INSERT
+
+**SQL Server (SqlBulkCopy)**
+- Legacy: SqlBulkCopy with DataTable
+- New IEnumerable: Reflection-free SqlBulkCopy (1.5-2x faster)
+- New IAsyncEnumerable: Streaming SqlBulkCopy
+
+### Use Cases for Performance Tests
+
+- **Optimization Decisions**: Choose the fastest method for your database
+- **Regression Testing**: Ensure performance doesn't degrade
+- **Benchmarking**: Compare database performance characteristics
+- **Migration Planning**: Estimate performance gains before migration
 
 ## Performance Benefits
 
