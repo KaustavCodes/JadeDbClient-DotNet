@@ -10,10 +10,12 @@ namespace JadeDbClient.Helpers;
 internal class Mapper
 {
     private readonly JadeDbMapperOptions _mapperOptions;
+    private readonly JadeDbServiceRegistration.JadeDbServiceOptions? _serviceOptions;
 
-    public Mapper(JadeDbMapperOptions mapperOptions)
+    public Mapper(JadeDbMapperOptions mapperOptions, JadeDbServiceRegistration.JadeDbServiceOptions? serviceOptions = null)
     {
         _mapperOptions = mapperOptions;
+        _serviceOptions = serviceOptions;
     }
 
     /// <summary>
@@ -24,12 +26,14 @@ internal class Mapper
         // Try to use pre-compiled mapper first
         if (_mapperOptions.TryGetMapper<T>(out var mapper))
         {
-            Console.WriteLine($"[MAPPER] Using SOURCE GENERATOR mapper for {typeof(T).Name}");
+            if (_serviceOptions?.EnableLogging == true)
+                Console.WriteLine($"[MAPPER] Using SOURCE GENERATOR mapper for {typeof(T).Name}");
             return mapper!(reader);
         }
 
         // Fall back to reflection-based mapping
-        Console.WriteLine($"[MAPPER] Falling back to REFLECTION for {typeof(T).Name}");
+        if (_serviceOptions?.EnableLogging == true)
+            Console.WriteLine($"[MAPPER] Falling back to REFLECTION for {typeof(T).Name}");
         return MapObjectReflection<T>(reader);
     }
 

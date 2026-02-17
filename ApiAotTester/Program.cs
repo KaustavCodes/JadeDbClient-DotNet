@@ -12,19 +12,26 @@ builder.Services.ConfigureHttpJsonOptions(options =>
     options.SerializerOptions.TypeInfoResolverChain.Insert(0, AppJsonSerializerContext.Default);
 });
 
-// Register JadeDbService with AOT-compatible pre-compiled mappers
-builder.Services.AddJadeDbService(options =>
-{
-    // Register a pre-compiled mapper for DataModel (AOT-compatible)
-    // options.RegisterMapper<DataModel>(reader => new DataModel
-    // {
-    //     id = reader.GetInt32(reader.GetOrdinal("id")),
-    //     name = reader.IsDBNull(reader.GetOrdinal("name")) ? null : reader.GetString(reader.GetOrdinal("name"))
-    // });
+// Register JadeDbService with AOT-compatible pre-compiled mappers and logging enabled
+builder.Services.AddJadeDbService(
+    options =>
+    {
+        // Register a pre-compiled mapper for DataModel (AOT-compatible)
+        // options.RegisterMapper<DataModel>(reader => new DataModel
+        // {
+        //     id = reader.GetInt32(reader.GetOrdinal("id")),
+        //     name = reader.IsDBNull(reader.GetOrdinal("name")) ? null : reader.GetString(reader.GetOrdinal("name"))
+        // });
 
-    // UserModel will use automatic reflection mapping (testing fallback)
-    // No mapper registered for UserModel - it will use reflection automatically
-});
+        // UserModel will use automatic reflection mapping (testing fallback)
+        // No mapper registered for UserModel - it will use reflection automatically
+    },
+    serviceOptions =>
+    {
+        serviceOptions.EnableLogging = true; // Enable logging for JadeDb
+        serviceOptions.LogExecutedQuery = true;
+    }
+);
 
 // Learn more about configuring OpenAPI at https://aka.ms/aspnet/openapi
 builder.Services.AddOpenApi();
@@ -151,7 +158,7 @@ app.MapGet("/test-aot-mixed", async (IDatabaseService dbConfig) =>
 // ========== PERFORMANCE TESTING APIs ==========
 
 // PostgreSQL Performance Test
-app.MapPost("/perf-test-postgres-bulk-insert", async (IDatabaseService dbConfig) =>
+app.MapGet("/perf-test-postgres-bulk-insert", async (IDatabaseService dbConfig) =>
 {
     var modes = new List<PerformanceModeResult>();
     var testData = GenerateTestProducts(1000);
@@ -205,7 +212,7 @@ app.MapPost("/perf-test-postgres-bulk-insert", async (IDatabaseService dbConfig)
 });
 
 // MySQL Performance Test
-app.MapPost("/perf-test-mysql-bulk-insert", async (IDatabaseService dbConfig) =>
+app.MapGet("/perf-test-mysql-bulk-insert", async (IDatabaseService dbConfig) =>
 {
     var modes = new List<PerformanceModeResult>();
     var testData = GenerateTestProducts(1000);
@@ -259,7 +266,7 @@ app.MapPost("/perf-test-mysql-bulk-insert", async (IDatabaseService dbConfig) =>
 });
 
 // SQL Server Performance Test
-app.MapPost("/perf-test-mssql-bulk-insert", async (IDatabaseService dbConfig) =>
+app.MapGet("/perf-test-mssql-bulk-insert", async (IDatabaseService dbConfig) =>
 {
     var modes = new List<PerformanceModeResult>();
     var testData = GenerateTestProducts(1000);

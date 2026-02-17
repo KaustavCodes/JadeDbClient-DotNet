@@ -5,6 +5,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Data.SqlClient;
 using System.Diagnostics.CodeAnalysis;
 using JadeDbClient.Helpers;
+using System.Diagnostics;
 
 namespace JadeDbClient;
 
@@ -12,17 +13,31 @@ public class MsSqlDbService : IDatabaseService
 {
     private readonly string _connectionString;
     private readonly JadeDbMapperOptions _mapperOptions;
+    private readonly JadeDbServiceRegistration.JadeDbServiceOptions _serviceOptions;
 
     public IDbConnection? Connection { get; set; }
 
     private readonly Mapper _mapper;
 
-    public MsSqlDbService(IConfiguration configuration, JadeDbMapperOptions mapperOptions)
+    public MsSqlDbService(IConfiguration configuration, JadeDbMapperOptions mapperOptions, JadeDbServiceRegistration.JadeDbServiceOptions serviceOptions)
     {
         _connectionString = configuration["ConnectionStrings:DbConnection"]
             ?? throw new InvalidOperationException("Connection string 'ConnectionStrings:DbConnection' not found in configuration.");
         _mapperOptions = mapperOptions ?? throw new ArgumentNullException(nameof(mapperOptions));
-        _mapper = new Mapper(_mapperOptions);
+        _serviceOptions = serviceOptions ?? throw new ArgumentNullException(nameof(serviceOptions));
+        _mapper = new Mapper(_mapperOptions, _serviceOptions);
+    }
+
+    private void LogQueryExecution(string query, long elapsedMilliseconds)
+    {
+        if (_serviceOptions.EnableLogging)
+        {
+            if (_serviceOptions.LogExecutedQuery)
+            {
+                Console.WriteLine($"[JadeDbClient] [MSSQL] Executed Query: {query}");
+            }
+            Console.WriteLine($"[JadeDbClient] [MSSQL] Execution Time: {elapsedMilliseconds} ms");
+        }
     }
 
     /// <summary>
@@ -83,6 +98,7 @@ public class MsSqlDbService : IDatabaseService
         using (var connection = new SqlConnection(_connectionString))
         {
             await connection.OpenAsync();
+            long startTimestamp = _serviceOptions.EnableLogging ? Stopwatch.GetTimestamp() : 0;
             using (var command = new SqlCommand(query, connection))
             {
                 if (parameters != null)
@@ -100,6 +116,10 @@ public class MsSqlDbService : IDatabaseService
                         results.Add(_mapper.MapObject<T>(reader));
                     }
                 }
+            }
+            if (_serviceOptions.EnableLogging)
+            {
+                LogQueryExecution(query, (long)Stopwatch.GetElapsedTime(startTimestamp).TotalMilliseconds);
             }
         }
 
@@ -121,6 +141,7 @@ public class MsSqlDbService : IDatabaseService
         using (var connection = new SqlConnection(_connectionString))
         {
             await connection.OpenAsync();
+            long startTimestamp = _serviceOptions.EnableLogging ? Stopwatch.GetTimestamp() : 0;
             using (var command = new SqlCommand(query, connection))
             {
                 if (parameters != null)
@@ -135,9 +156,18 @@ public class MsSqlDbService : IDatabaseService
                 {
                     if (reader.Read())
                     {
-                        return _mapper.MapObject<T>(reader);
+                        var result = _mapper.MapObject<T>(reader);
+                        if (_serviceOptions.EnableLogging)
+                        {
+                            LogQueryExecution(query, (long)Stopwatch.GetElapsedTime(startTimestamp).TotalMilliseconds);
+                        }
+                        return result;
                     }
                 }
+            }
+            if (_serviceOptions.EnableLogging)
+            {
+                LogQueryExecution(query, (long)Stopwatch.GetElapsedTime(startTimestamp).TotalMilliseconds);
             }
         }
 
@@ -154,6 +184,7 @@ public class MsSqlDbService : IDatabaseService
         using (var connection = new SqlConnection(_connectionString))
         {
             connection.Open();
+            long startTimestamp = _serviceOptions.EnableLogging ? Stopwatch.GetTimestamp() : 0;
             using (var command = new SqlCommand(query, connection))
             {
                 if (parameters != null)
@@ -165,6 +196,11 @@ public class MsSqlDbService : IDatabaseService
                 }
 
                 var data = await command.ExecuteScalarAsync();
+
+                if (_serviceOptions.EnableLogging)
+                {
+                    LogQueryExecution(query, (long)Stopwatch.GetElapsedTime(startTimestamp).TotalMilliseconds);
+                }
 
                 if (data != null && data != DBNull.Value)
                 {
@@ -195,6 +231,7 @@ public class MsSqlDbService : IDatabaseService
         using (var connection = new SqlConnection(_connectionString))
         {
             await connection.OpenAsync();
+            var stopwatch = Stopwatch.StartNew();
             using (var command = new SqlCommand(storedProcedureName, connection))
             {
                 command.CommandType = CommandType.StoredProcedure;
@@ -215,6 +252,8 @@ public class MsSqlDbService : IDatabaseService
                     }
                 }
             }
+            stopwatch.Stop();
+            LogQueryExecution($"StoredProcedure: {storedProcedureName}", stopwatch.ElapsedMilliseconds);
         }
 
         return results;
@@ -232,6 +271,8 @@ public class MsSqlDbService : IDatabaseService
         using (var connection = new SqlConnection(_connectionString))
         {
             await connection.OpenAsync();
+            long startTimestamp = _serviceOptions.EnableLogging ? Stopwatch.GetTimestamp() : 0;
+
             using (var command = new SqlCommand(storedProcedureName, connection))
             {
                 command.CommandType = CommandType.StoredProcedure;
@@ -246,7 +287,10 @@ public class MsSqlDbService : IDatabaseService
 
                 var affectedRows = await command.ExecuteNonQueryAsync();
 
-
+                if (_serviceOptions.EnableLogging)
+                {
+                    LogQueryExecution($"StoredProcedure: {storedProcedureName}", (long)Stopwatch.GetElapsedTime(startTimestamp).TotalMilliseconds);
+                }
 
                 return affectedRows;
             }
@@ -267,6 +311,7 @@ public class MsSqlDbService : IDatabaseService
         using (var connection = new SqlConnection(_connectionString))
         {
             await connection.OpenAsync();
+            var stopwatch = Stopwatch.StartNew();
             using (var command = new SqlCommand(storedProcedureName, connection))
             {
                 command.CommandType = CommandType.StoredProcedure;
@@ -288,6 +333,9 @@ public class MsSqlDbService : IDatabaseService
                         outputValues.Add(parameter.ParameterName, parameter.Value ?? DBNull.Value);
                     }
                 }
+
+                stopwatch.Stop();
+                LogQueryExecution($"StoredProcedureWithOutput: {storedProcedureName}", stopwatch.ElapsedMilliseconds);
             }
         }
 
@@ -306,6 +354,8 @@ public class MsSqlDbService : IDatabaseService
         using (var connection = new SqlConnection(_connectionString))
         {
             await connection.OpenAsync();
+            long startTimestamp = _serviceOptions.EnableLogging ? Stopwatch.GetTimestamp() : 0;
+
             using (var command = new SqlCommand(commandText, connection))
             {
                 if (parameters != null)
@@ -317,6 +367,11 @@ public class MsSqlDbService : IDatabaseService
                 }
 
                 await command.ExecuteNonQueryAsync();
+            }
+
+            if (_serviceOptions.EnableLogging)
+            {
+                LogQueryExecution(commandText, (long)Stopwatch.GetElapsedTime(startTimestamp).TotalMilliseconds);
             }
         }
     }
@@ -418,15 +473,29 @@ public class MsSqlDbService : IDatabaseService
         if (items == null) throw new ArgumentNullException(nameof(items));
         if (string.IsNullOrWhiteSpace(tableName)) throw new ArgumentException("Table name cannot be null or empty", nameof(tableName));
 
+        long startTimestamp = _serviceOptions.EnableLogging ? Stopwatch.GetTimestamp() : 0;
+        int totalInserted = 0;
+
         // Try to use generated accessor for reflection-free operation
         if (JadeDbMapperOptions.TryGetBulkInsertAccessor<T>(out var accessor) && accessor != null)
         {
-            Console.WriteLine($"[BULK INSERT] Using SOURCE GENERATOR accessor for {typeof(T).Name}");
-            return await BulkInsertWithAccessorAsync(tableName, items, accessor, batchSize);
+            if (_serviceOptions.EnableLogging)
+            {
+                Console.WriteLine($"[BULK INSERT] Using SOURCE GENERATOR accessor for {typeof(T).Name}");
+            }
+            totalInserted = await BulkInsertWithAccessorAsync(tableName, items, accessor, batchSize);
+            if (_serviceOptions.EnableLogging)
+            {
+                LogQueryExecution($"[JadeDbClient] BulkInsert<{typeof(T).Name}>({tableName})", (long)Stopwatch.GetElapsedTime(startTimestamp).TotalMilliseconds);
+            }
+            return totalInserted;
         }
 
         // Fallback to reflection-based approach
-        Console.WriteLine($"[BULK INSERT] Falling back to REFLECTION for {typeof(T).Name}");
+        if (_serviceOptions.EnableLogging)
+        {
+            Console.WriteLine($"[BULK INSERT] Falling back to REFLECTION for {typeof(T).Name}");
+        }
         var properties = typeof(T).GetProperties().Where(p => p.CanRead).ToArray();
         if (properties.Length == 0) throw new InvalidOperationException($"Type {typeof(T).Name} has no readable properties");
 
@@ -438,7 +507,6 @@ public class MsSqlDbService : IDatabaseService
             dataTable.Columns.Add(property.Name, columnType);
         }
 
-        int totalInserted = 0;
         int batchCount = 0;
 
         using var connection = new SqlConnection(_connectionString);
@@ -472,6 +540,11 @@ public class MsSqlDbService : IDatabaseService
             totalInserted += batchCount;
         }
 
+        if (_serviceOptions.EnableLogging)
+        {
+            LogQueryExecution($"[JadeDbClient] BulkInsert<{typeof(T).Name}>({tableName})", (long)Stopwatch.GetElapsedTime(startTimestamp).TotalMilliseconds);
+        }
+
         return totalInserted;
     }
 
@@ -480,6 +553,7 @@ public class MsSqlDbService : IDatabaseService
     /// </summary>
     private async Task<int> BulkInsertWithAccessorAsync<T>(string tableName, IEnumerable<T> items, BulkInsertAccessor accessor, int batchSize)
     {
+        long startTimestamp = _serviceOptions.EnableLogging ? Stopwatch.GetTimestamp() : 0;
         // Create DataTable structure based on accessor columns
         var dataTable = new DataTable();
         foreach (var columnName in accessor.ColumnNames)
@@ -521,6 +595,11 @@ public class MsSqlDbService : IDatabaseService
             totalInserted += batchCount;
         }
 
+        if (_serviceOptions.EnableLogging)
+        {
+            LogQueryExecution($"[JadeDbClient] BulkInsertWithAccessor<{typeof(T).Name}>({tableName})", (long)Stopwatch.GetElapsedTime(startTimestamp).TotalMilliseconds);
+        }
+
         return totalInserted;
     }
 
@@ -556,15 +635,29 @@ public class MsSqlDbService : IDatabaseService
         if (items == null) throw new ArgumentNullException(nameof(items));
         if (string.IsNullOrWhiteSpace(tableName)) throw new ArgumentException("Table name cannot be null or empty", nameof(tableName));
 
+        long startTimestamp = _serviceOptions.EnableLogging ? Stopwatch.GetTimestamp() : 0;
+        int totalInserted = 0;
+
         // Try to use generated accessor for reflection-free operation
         if (JadeDbMapperOptions.TryGetBulkInsertAccessor<T>(out var accessor) && accessor != null)
         {
-            Console.WriteLine($"[BULK INSERT STREAM] Using SOURCE GENERATOR accessor for {typeof(T).Name}");
-            return await BulkInsertWithAccessorAsync(tableName, items, accessor, progress, batchSize);
+            if (_serviceOptions.EnableLogging)
+            {
+                Console.WriteLine($"[BULK INSERT STREAM] Using SOURCE GENERATOR accessor for {typeof(T).Name}");
+            }
+            totalInserted = await BulkInsertWithAccessorAsync(tableName, items, accessor, progress, batchSize);
+            if (_serviceOptions.EnableLogging)
+            {
+                LogQueryExecution($"[JadeDbClient] BulkInsertStream<{typeof(T).Name}>({tableName})", (long)Stopwatch.GetElapsedTime(startTimestamp).TotalMilliseconds);
+            }
+            return totalInserted;
         }
 
         // Fallback to reflection-based approach
-        Console.WriteLine($"[BULK INSERT STREAM] Falling back to REFLECTION for {typeof(T).Name}");
+        if (_serviceOptions.EnableLogging)
+        {
+            Console.WriteLine($"[BULK INSERT STREAM] Falling back to REFLECTION for {typeof(T).Name}");
+        }
         var properties = typeof(T).GetProperties().Where(p => p.CanRead).ToArray();
         if (properties.Length == 0) throw new InvalidOperationException($"Type {typeof(T).Name} has no readable properties");
 
@@ -576,7 +669,6 @@ public class MsSqlDbService : IDatabaseService
             dataTable.Columns.Add(property.Name, columnType);
         }
 
-        int totalInserted = 0;
         int batchCount = 0;
 
         using var connection = new SqlConnection(_connectionString);
@@ -613,6 +705,11 @@ public class MsSqlDbService : IDatabaseService
             progress?.Report(totalInserted);
         }
 
+        if (_serviceOptions.EnableLogging)
+        {
+            LogQueryExecution($"[JadeDbClient] BulkInsertStream<{typeof(T).Name}>({tableName})", (long)Stopwatch.GetElapsedTime(startTimestamp).TotalMilliseconds);
+        }
+
         return totalInserted;
     }
 
@@ -621,6 +718,7 @@ public class MsSqlDbService : IDatabaseService
     /// </summary>
     private async Task<int> BulkInsertWithAccessorAsync<T>(string tableName, IAsyncEnumerable<T> items, BulkInsertAccessor accessor, IProgress<int>? progress, int batchSize)
     {
+        long startTimestamp = _serviceOptions.EnableLogging ? Stopwatch.GetTimestamp() : 0;
         // Create DataTable structure based on accessor columns
         var dataTable = new DataTable();
         foreach (var columnName in accessor.ColumnNames)
@@ -663,6 +761,11 @@ public class MsSqlDbService : IDatabaseService
             await ExecuteSqlBulkCopyWithAccessorAsync(connection, tableName, dataTable, accessor.ColumnNames, batchSize);
             totalInserted += batchCount;
             progress?.Report(totalInserted);
+        }
+
+        if (_serviceOptions.EnableLogging)
+        {
+            LogQueryExecution($"[JadeDbClient] BulkInsertWithAccessorStream<{typeof(T).Name}>({tableName})", (long)Stopwatch.GetElapsedTime(startTimestamp).TotalMilliseconds);
         }
 
         return totalInserted;
