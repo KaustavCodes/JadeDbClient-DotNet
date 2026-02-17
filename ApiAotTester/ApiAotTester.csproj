@@ -9,8 +9,12 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="JadeDbClient" Version="1.2.0" />
     <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="10.0.3" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../JadeDbClient/JadeDbClient.csproj" />
+    <ProjectReference Include="../JadeDbClient.SourceGenerator/JadeDbClient.SourceGenerator.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
   </ItemGroup>
   
 </Project>

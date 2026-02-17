@@ -5,6 +5,7 @@ using Microsoft.Extensions.Configuration;
 using MySqlConnector;
 using System.Diagnostics.CodeAnalysis;
 using JadeDbClient.Helpers;
+using System.Diagnostics;
 
 namespace JadeDbClient;
 
@@ -12,17 +13,37 @@ public class MySqlDbService : IDatabaseService
 {
     private readonly string _connectionString;
     private readonly JadeDbMapperOptions _mapperOptions;
+    private readonly JadeDbServiceRegistration.JadeDbServiceOptions _serviceOptions;
 
     public IDbConnection? Connection { get; set; }
 
     private readonly Mapper _mapper;
 
+    // Backward compatible constructor (for existing users without logging)
     public MySqlDbService(IConfiguration configuration, JadeDbMapperOptions mapperOptions)
+        : this(configuration, mapperOptions, new JadeDbServiceRegistration.JadeDbServiceOptions())
+    {
+    }
+
+    public MySqlDbService(IConfiguration configuration, JadeDbMapperOptions mapperOptions, JadeDbServiceRegistration.JadeDbServiceOptions serviceOptions)
     {
         _connectionString = configuration["ConnectionStrings:DbConnection"]
             ?? throw new InvalidOperationException("Connection string 'ConnectionStrings:DbConnection' not found in configuration.");
         _mapperOptions = mapperOptions ?? throw new ArgumentNullException(nameof(mapperOptions));
-        _mapper = new Mapper(_mapperOptions);
+        _serviceOptions = serviceOptions ?? new JadeDbServiceRegistration.JadeDbServiceOptions(); // Default if null
+        _mapper = new Mapper(_mapperOptions, _serviceOptions);
+    }
+
+    private void LogQueryExecution(string query, long elapsedMilliseconds)
+    {
+        if (_serviceOptions.EnableLogging)
+        {
+            if (_serviceOptions.LogExecutedQuery)
+            {
+                Console.WriteLine($"[JadeDbClient] [MYSQL] Executed Query: {query}");
+            }
+            Console.WriteLine($"[JadeDbClient] [MYSQL] Execution Time: {elapsedMilliseconds} ms");
+        }
     }
 
     /// <summary>
@@ -46,14 +67,14 @@ public class MySqlDbService : IDatabaseService
     }
 
     /// <summary>
-    /// Creates a new instance of an <see cref="IDbDataParameter"/> for SQL Server.
+    /// Creates a new instance of an <see cref="IDbDataParameter"/> for MySql.
     /// </summary>
     /// <param name="name">The name of the parameter.</param>
     /// <param name="value">The value of the parameter.</param>
     /// <param name="dbType">The <see cref="DbType"/> of the parameter.</param>
     /// <param name="direction">The <see cref="ParameterDirection"/> of the parameter. Default is <see cref="ParameterDirection.Input"/>.</param>
     /// <param name="size">The size of the parameter. Default is 0.</param>
-    /// <returns>A new instance of <see cref="SqlParameter"/> configured with the specified properties.</returns>
+    /// <returns>A new instance of <see cref="MySqlParameter"/> configured with the specified properties.</returns>
     public IDbDataParameter GetParameter(string name, object value, DbType dbType, ParameterDirection direction = ParameterDirection.Input, int size = 0)
     {
         return new MySqlParameter
@@ -73,9 +94,6 @@ public class MySqlDbService : IDatabaseService
     /// <param name="query">The SQL query to be executed.</param>
     /// <param name="parameters">A collection of parameters to be used in the SQL query. Default is null.</param>
     /// <returns>A task representing the asynchronous operation. The task result contains a collection of objects of type T that represent the rows returned by the query.</returns>
-    /// <exception cref="MySql.Data.MySqlClient.MySqlException">Thrown when there is an error executing the query.</exception>
-    /// <exception cref="InvalidOperationException">Thrown when there is an error creating an instance of type T.</exception>
-    /// <exception cref="ArgumentException">Thrown when there is an error setting a property value.</exception>
     public async Task<IEnumerable<T>> ExecuteQueryAsync<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicProperties | DynamicallyAccessedMemberTypes.PublicParameterlessConstructor)] T>(string query, IEnumerable<IDbDataParameter>? parameters = null)
     {
         var results = new List<T>();
@@ -83,6 +101,8 @@ public class MySqlDbService : IDatabaseService
         using (var connection = new MySqlConnection(_connectionString))
         {
             await connection.OpenAsync();
+            long startTimestamp = _serviceOptions.EnableLogging ? Stopwatch.GetTimestamp() : 0;
+
             using (var command = new MySqlCommand(query, connection))
             {
                 if (parameters != null)
@@ -101,6 +121,11 @@ public class MySqlDbService : IDatabaseService
                     }
                 }
             }
+
+            if (_serviceOptions.EnableLogging)
+            {
+                LogQueryExecution(query, (long)Stopwatch.GetElapsedTime(startTimestamp).TotalMilliseconds);
+            }
         }
 
         return results;
@@ -113,14 +138,13 @@ public class MySqlDbService : IDatabaseService
     /// <param name="query">The SQL query to be executed.</param>
     /// <param name="parameters">A collection of parameters to be used in the SQL query. Default is null.</param>
     /// <returns>A task representing the asynchronous operation. The task result contains a collection of objects of type T that represent the rows returned by the query.</returns>
-    /// <exception cref="MySql.Data.MySqlClient.MySqlException">Thrown when there is an error executing the query.</exception>
-    /// <exception cref="InvalidOperationException">Thrown when there is an error creating an instance of type T.</exception>
-    /// <exception cref="ArgumentException">Thrown when there is an error setting a property value.</exception>
     public async Task<T?> ExecuteQueryFirstRowAsync<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicProperties | DynamicallyAccessedMemberTypes.PublicParameterlessConstructor)] T>(string query, IEnumerable<IDbDataParameter>? parameters = null)
     {
         using (var connection = new MySqlConnection(_connectionString))
         {
             await connection.OpenAsync();
+            long startTimestamp = _serviceOptions.EnableLogging ? Stopwatch.GetTimestamp() : 0;
+
             using (var command = new MySqlCommand(query, connection))
             {
                 if (parameters != null)
@@ -135,13 +159,23 @@ public class MySqlDbService : IDatabaseService
                 {
                     if (reader.Read())
                     {
-                        return _mapper.MapObject<T>(reader);
+                        var result = _mapper.MapObject<T>(reader);
+                        if (_serviceOptions.EnableLogging)
+                        {
+                            LogQueryExecution(query, (long)Stopwatch.GetElapsedTime(startTimestamp).TotalMilliseconds);
+                        }
+                        return result;
                     }
                 }
             }
+
+            if (_serviceOptions.EnableLogging)
+            {
+                LogQueryExecution(query, (long)Stopwatch.GetElapsedTime(startTimestamp).TotalMilliseconds);
+            }
         }
 
-        return default(T);
+        return default;
     }
 
     /// <summary>
@@ -154,6 +188,8 @@ public class MySqlDbService : IDatabaseService
         using (var connection = new MySqlConnection(_connectionString))
         {
             connection.Open();
+            long startTimestamp = _serviceOptions.EnableLogging ? Stopwatch.GetTimestamp() : 0;
+
             using (var command = new MySqlCommand(query, connection))
             {
                 if (parameters != null)
@@ -165,6 +201,11 @@ public class MySqlDbService : IDatabaseService
                 }
 
                 var data = await command.ExecuteScalarAsync();
+
+                if (_serviceOptions.EnableLogging)
+                {
+                    LogQueryExecution(query, (long)Stopwatch.GetElapsedTime(startTimestamp).TotalMilliseconds);
+                }
 
                 if (data != null && data != DBNull.Value)
                 {
@@ -185,9 +226,6 @@ public class MySqlDbService : IDatabaseService
     /// <param name="storedProcedureName">The name of the stored procedure to be executed.</param>
     /// <param name="parameters">A collection of parameters to be used in the stored procedure. Default is null.</param>
     /// <returns>A task representing the asynchronous operation. The task result contains a collection of objects of type T that represent the rows returned by the stored procedure.</returns>
-    /// <exception cref="MySql.Data.MySqlClient.MySqlException">Thrown when there is an error executing the stored procedure.</exception>
-    /// <exception cref="InvalidOperationException">Thrown when there is an error creating an instance of type T.</exception>
-    /// <exception cref="ArgumentException">Thrown when there is an error setting a property value.</exception>
     public async Task<IEnumerable<T>> ExecuteStoredProcedureSelectDataAsync<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicProperties | DynamicallyAccessedMemberTypes.PublicParameterlessConstructor)] T>(string storedProcedureName, IEnumerable<IDbDataParameter>? parameters = null)
     {
         var results = new List<T>();
@@ -195,6 +233,8 @@ public class MySqlDbService : IDatabaseService
         using (var connection = new MySqlConnection(_connectionString))
         {
             await connection.OpenAsync();
+            long startTimestamp = _serviceOptions.EnableLogging ? Stopwatch.GetTimestamp() : 0;
+
             using (var command = new MySqlCommand(storedProcedureName, connection))
             {
                 command.CommandType = CommandType.StoredProcedure;
@@ -215,6 +255,11 @@ public class MySqlDbService : IDatabaseService
                     }
                 }
             }
+
+            if (_serviceOptions.EnableLogging)
+            {
+                LogQueryExecution($"StoredProcedure: {storedProcedureName}", (long)Stopwatch.GetElapsedTime(startTimestamp).TotalMilliseconds);
+            }
         }
 
         return results;
@@ -226,12 +271,13 @@ public class MySqlDbService : IDatabaseService
     /// <param name="storedProcedureName">The name of the stored procedure to be executed.</param>
     /// <param name="parameters">A collection of parameters to be used in the stored procedure. Default is null.</param>
     /// <returns>The number of rows effected after executing the stored procedure.</returns>
-    /// <exception cref="MySql.Data.MySqlClient.MySqlException">Thrown when there is an error executing the stored procedure.</exception>
     public async Task<int> ExecuteStoredProcedureAsync(string storedProcedureName, IEnumerable<IDbDataParameter>? parameters = null)
     {
         using (var connection = new MySqlConnection(_connectionString))
         {
             await connection.OpenAsync();
+            long startTimestamp = _serviceOptions.EnableLogging ? Stopwatch.GetTimestamp() : 0;
+
             using (var command = new MySqlCommand(storedProcedureName, connection))
             {
                 command.CommandType = CommandType.StoredProcedure;
@@ -246,6 +292,11 @@ public class MySqlDbService : IDatabaseService
 
                 int affectedRows = await command.ExecuteNonQueryAsync();
 
+                if (_serviceOptions.EnableLogging)
+                {
+                    LogQueryExecution($"StoredProcedure: {storedProcedureName}", (long)Stopwatch.GetElapsedTime(startTimestamp).TotalMilliseconds);
+                }
+
                 return affectedRows;
             }
         }
@@ -257,7 +308,6 @@ public class MySqlDbService : IDatabaseService
     /// <param name="storedProcedureName">The name of the stored procedure to be executed.</param>
     /// <param name="parameters">A collection of parameters to be used in the stored procedure. This includes input, output, and input-output parameters.</param>
     /// <returns>A task representing the asynchronous operation. The task result contains a dictionary where the keys are the names of the output parameters and the values are their corresponding values.</returns>
-    /// <exception cref="MySql.Data.MySqlClient.MySqlException">Thrown when there is an error executing the stored procedure.</exception>
     public async Task<Dictionary<string, object>> ExecuteStoredProcedureWithOutputAsync(string storedProcedureName, IEnumerable<IDbDataParameter> parameters)
     {
         var outputValues = new Dictionary<string, object>();
@@ -265,6 +315,8 @@ public class MySqlDbService : IDatabaseService
         using (var connection = new MySqlConnection(_connectionString))
         {
             await connection.OpenAsync();
+            long startTimestamp = _serviceOptions.EnableLogging ? Stopwatch.GetTimestamp() : 0;
+
             using (var command = new MySqlCommand(storedProcedureName, connection))
             {
                 command.CommandType = CommandType.StoredProcedure;
@@ -286,6 +338,11 @@ public class MySqlDbService : IDatabaseService
                         outputValues.Add(parameter.ParameterName, parameter.Value ?? DBNull.Value);
                     }
                 }
+
+                if (_serviceOptions.EnableLogging)
+                {
+                    LogQueryExecution($"StoredProcedureWithOutput: {storedProcedureName}", (long)Stopwatch.GetElapsedTime(startTimestamp).TotalMilliseconds);
+                }
             }
         }
 
@@ -298,12 +355,13 @@ public class MySqlDbService : IDatabaseService
     /// <param name="commandText">The SQL command to be executed.</param>
     /// <param name="parameters">A collection of parameters to be used in the SQL command. Default is null.</param>
     /// <returns>A task representing the asynchronous operation.</returns>
-    /// <exception cref="NpgsqlException">Thrown when there is an error executing the command.</exception>
     public async Task ExecuteCommandAsync(string commandText, IEnumerable<IDbDataParameter>? parameters = null)
     {
         using (var connection = new MySqlConnection(_connectionString))
         {
             await connection.OpenAsync();
+            long startTimestamp = _serviceOptions.EnableLogging ? Stopwatch.GetTimestamp() : 0;
+
             using (var command = new MySqlCommand(commandText, connection))
             {
                 if (parameters != null)
@@ -316,18 +374,25 @@ public class MySqlDbService : IDatabaseService
 
                 await command.ExecuteNonQueryAsync();
             }
+
+            if (_serviceOptions.EnableLogging)
+            {
+                LogQueryExecution(commandText, (long)Stopwatch.GetElapsedTime(startTimestamp).TotalMilliseconds);
+            }
         }
     }
 
     /// <summary>
-    /// Bulk inserts a DataTable into a PostgreSQL table.
+    /// Bulk inserts a DataTable into a MySql table.
     /// </summary>
     /// <param name="dataTable">The DataTable to insert.</param>
-    /// <param name="tableName">The target PostgreSQL table name.</param>
+    /// <param name="tableName">The target MySql table name.</param>
     public async Task<bool> InsertDataTable(string tableName, DataTable dataTable)
     {
         using var connection = new MySqlConnection(_connectionString);
         await connection.OpenAsync();
+
+        long startTimestamp = _serviceOptions.EnableLogging ? Stopwatch.GetTimestamp() : 0;
 
         using var transaction = await connection.BeginTransactionAsync();
         try
@@ -352,6 +417,12 @@ public class MySqlDbService : IDatabaseService
             }
 
             await transaction.CommitAsync();
+
+            if (_serviceOptions.EnableLogging)
+            {
+                LogQueryExecution($"InsertDataTable({tableName})", (long)Stopwatch.GetElapsedTime(startTimestamp).TotalMilliseconds);
+            }
+
             return true;
         }
         catch
@@ -373,6 +444,8 @@ public class MySqlDbService : IDatabaseService
     {
         using var connection = new MySqlConnection(_connectionString);
         await connection.OpenAsync();
+
+        long startTimestamp = _serviceOptions.EnableLogging ? Stopwatch.GetTimestamp() : 0;
 
         using var transaction = await connection.BeginTransactionAsync();
         try
@@ -412,6 +485,12 @@ public class MySqlDbService : IDatabaseService
             }
 
             await transaction.CommitAsync();
+
+            if (_serviceOptions.EnableLogging)
+            {
+                LogQueryExecution($"InsertDataTableWithJsonData({tableName})", (long)Stopwatch.GetElapsedTime(startTimestamp).TotalMilliseconds);
+            }
+
             return true;
         }
         catch
@@ -419,6 +498,343 @@ public class MySqlDbService : IDatabaseService
             await transaction.RollbackAsync();
             throw;
         }
+    }
+
+    /// <summary>
+    /// Bulk inserts a collection of objects into a MySQL table using optimized batch inserts.
+    /// </summary>
+    /// <typeparam name="T">The type of objects to insert. Properties should match database column names.</typeparam>
+    /// <param name="tableName">The target database table name.</param>
+    /// <param name="items">The collection of items to insert.</param>
+    /// <param name="batchSize">Number of records to insert per batch (default 1000).</param>
+    /// <returns>The total number of rows inserted.</returns>
+    public async Task<int> BulkInsertAsync<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicProperties)] T>(string tableName, IEnumerable<T> items, int batchSize = 1000)
+    {
+        if (items == null) throw new ArgumentNullException(nameof(items));
+        if (string.IsNullOrWhiteSpace(tableName)) throw new ArgumentException("Table name cannot be null or empty", nameof(tableName));
+
+        long startTimestamp = _serviceOptions.EnableLogging ? Stopwatch.GetTimestamp() : 0;
+        int totalInserted = 0;
+
+        // Try to use generated accessor for reflection-free operation
+        if (JadeDbMapperOptions.TryGetBulkInsertAccessor<T>(out var accessor) && accessor != null)
+        {
+            if (_serviceOptions.EnableLogging)
+            {
+                Console.WriteLine($"[BULK INSERT] Using SOURCE GENERATOR accessor for {typeof(T).Name}");
+            }
+            totalInserted = await BulkInsertWithAccessorAsync(tableName, items, accessor, batchSize);
+            if (_serviceOptions.EnableLogging)
+            {
+                LogQueryExecution($"[JadeDbClient] BulkInsert<{typeof(T).Name}>({tableName})", (long)Stopwatch.GetElapsedTime(startTimestamp).TotalMilliseconds);
+            }
+            return totalInserted;
+        }
+
+        // Fallback to reflection-based approach
+        if (_serviceOptions.EnableLogging)
+        {
+            Console.WriteLine($"[BULK INSERT] Falling back to REFLECTION for {typeof(T).Name}");
+        }
+        var properties = typeof(T).GetProperties().Where(p => p.CanRead).ToArray();
+        if (properties.Length == 0) throw new InvalidOperationException($"Type {typeof(T).Name} has no readable properties");
+
+        var columnNames = properties.Select(p => $"`{p.Name}`").ToArray();
+
+        using var connection = new MySqlConnection(_connectionString);
+        await connection.OpenAsync();
+        using var transaction = await connection.BeginTransactionAsync();
+
+        try
+        {
+            var batch = new List<T>();
+            foreach (var item in items)
+            {
+                batch.Add(item);
+
+                if (batch.Count >= batchSize)
+                {
+                    await InsertBatchAsync(connection, transaction, tableName, columnNames, properties, batch);
+                    totalInserted += batch.Count;
+                    batch.Clear();
+                }
+            }
+
+            // Insert remaining items
+            if (batch.Count > 0)
+            {
+                await InsertBatchAsync(connection, transaction, tableName, columnNames, properties, batch);
+                totalInserted += batch.Count;
+            }
+
+            await transaction.CommitAsync();
+
+            if (_serviceOptions.EnableLogging)
+            {
+                LogQueryExecution($"[JadeDbClient] BulkInsert<{typeof(T).Name}>({tableName})", (long)Stopwatch.GetElapsedTime(startTimestamp).TotalMilliseconds);
+            }
+
+            return totalInserted;
+        }
+        catch
+        {
+            await transaction.RollbackAsync();
+            throw;
+        }
+    }
+
+    /// <summary>
+    /// Reflection-free bulk insert using generated accessor
+    /// </summary>
+    private async Task<int> BulkInsertWithAccessorAsync<T>(string tableName, IEnumerable<T> items, BulkInsertAccessor accessor, int batchSize)
+    {
+        long startTimestamp = _serviceOptions.EnableLogging ? Stopwatch.GetTimestamp() : 0;
+        var columnNames = accessor.ColumnNames.Select(c => $"`{c}`").ToArray();
+        int totalInserted = 0;
+
+        using var connection = new MySqlConnection(_connectionString);
+        await connection.OpenAsync();
+        using var transaction = await connection.BeginTransactionAsync();
+
+        try
+        {
+            var batch = new List<T>();
+            foreach (var item in items)
+            {
+                batch.Add(item);
+
+                if (batch.Count >= batchSize)
+                {
+                    await InsertBatchWithAccessorAsync(connection, transaction, tableName, columnNames, accessor, batch);
+                    totalInserted += batch.Count;
+                    batch.Clear();
+                }
+            }
+
+            // Insert remaining items
+            if (batch.Count > 0)
+            {
+                await InsertBatchWithAccessorAsync(connection, transaction, tableName, columnNames, accessor, batch);
+                totalInserted += batch.Count;
+            }
+
+            await transaction.CommitAsync();
+
+            if (_serviceOptions.EnableLogging)
+            {
+                LogQueryExecution($"[JadeDbClient] BulkInsertWithAccessor<{typeof(T).Name}>({tableName})", (long)Stopwatch.GetElapsedTime(startTimestamp).TotalMilliseconds);
+            }
+
+            return totalInserted;
+        }
+        catch
+        {
+            await transaction.RollbackAsync();
+            throw;
+        }
+    }
+
+    /// <summary>
+    /// Helper method to insert a batch using accessor (reflection-free)
+    /// </summary>
+    private async Task InsertBatchWithAccessorAsync<T>(MySqlConnection connection, MySqlTransaction transaction,
+        string tableName, string[] columnNames, BulkInsertAccessor accessor, List<T> batch)
+    {
+        if (batch.Count == 0) return;
+
+        var columnList = string.Join(", ", columnNames);
+        var valuesList = new List<string>();
+        var parameters = new List<MySqlParameter>();
+
+        for (int i = 0; i < batch.Count; i++)
+        {
+            var values = accessor.GetValues(batch[i]!);
+            var paramPlaceholders = new List<string>();
+            for (int j = 0; j < values.Length; j++)
+            {
+                var paramName = $"@p{i}_{j}";
+                paramPlaceholders.Add(paramName);
+                parameters.Add(new MySqlParameter(paramName, values[j] ?? DBNull.Value));
+            }
+            valuesList.Add($"({string.Join(", ", paramPlaceholders)})");
+        }
+
+        var insertQuery = $"INSERT INTO `{tableName}` ({columnList}) VALUES {string.Join(", ", valuesList)}";
+
+        using var command = new MySqlCommand(insertQuery, connection, transaction);
+        command.Parameters.AddRange(parameters.ToArray());
+        await command.ExecuteNonQueryAsync();
+    }
+
+    /// <summary>
+    /// Bulk inserts a stream of objects into a MySQL table with progress reporting.
+    /// </summary>
+    /// <typeparam name="T">The type of objects to insert. Properties should match database column names.</typeparam>
+    /// <param name="tableName">The target database table name.</param>
+    /// <param name="items">The async enumerable stream of items to insert.</param>
+    /// <param name="progress">Optional progress reporter that receives the count of rows inserted.</param>
+    /// <param name="batchSize">Number of records to insert per batch (default 1000).</param>
+    /// <returns>The total number of rows inserted.</returns>
+    public async Task<int> BulkInsertAsync<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicProperties)] T>(string tableName, IAsyncEnumerable<T> items, IProgress<int>? progress = null, int batchSize = 1000)
+    {
+        if (items == null) throw new ArgumentNullException(nameof(items));
+        if (string.IsNullOrWhiteSpace(tableName)) throw new ArgumentException("Table name cannot be null or empty", nameof(tableName));
+
+        long startTimestamp = _serviceOptions.EnableLogging ? Stopwatch.GetTimestamp() : 0;
+        int totalInserted = 0;
+
+        // Try to use generated accessor for reflection-free operation
+        if (JadeDbMapperOptions.TryGetBulkInsertAccessor<T>(out var accessor) && accessor != null)
+        {
+            if (_serviceOptions.EnableLogging)
+            {
+                Console.WriteLine($"[BULK INSERT STREAM] Using SOURCE GENERATOR accessor for {typeof(T).Name}");
+            }
+            totalInserted = await BulkInsertWithAccessorAsync(tableName, items, accessor, progress, batchSize);
+            if (_serviceOptions.EnableLogging)
+            {
+                LogQueryExecution($"[JadeDbClient] BulkInsertStream<{typeof(T).Name}>({tableName})", (long)Stopwatch.GetElapsedTime(startTimestamp).TotalMilliseconds);
+            }
+            return totalInserted;
+        }
+
+        // Fallback to reflection-based approach
+        if (_serviceOptions.EnableLogging)
+        {
+            Console.WriteLine($"[BULK INSERT STREAM] Falling back to REFLECTION for {typeof(T).Name}");
+        }
+        var properties = typeof(T).GetProperties().Where(p => p.CanRead).ToArray();
+        if (properties.Length == 0) throw new InvalidOperationException($"Type {typeof(T).Name} has no readable properties");
+
+        var columnNames = properties.Select(p => $"`{p.Name}`").ToArray();
+
+        using var connection = new MySqlConnection(_connectionString);
+        await connection.OpenAsync();
+        using var transaction = await connection.BeginTransactionAsync();
+
+        try
+        {
+            var batch = new List<T>();
+            await foreach (var item in items)
+            {
+                batch.Add(item);
+
+                if (batch.Count >= batchSize)
+                {
+                    await InsertBatchAsync(connection, transaction, tableName, columnNames, properties, batch);
+                    totalInserted += batch.Count;
+                    progress?.Report(totalInserted);
+                    batch.Clear();
+                }
+            }
+
+            // Insert remaining items
+            if (batch.Count > 0)
+            {
+                await InsertBatchAsync(connection, transaction, tableName, columnNames, properties, batch);
+                totalInserted += batch.Count;
+                progress?.Report(totalInserted);
+            }
+
+            await transaction.CommitAsync();
+
+            if (_serviceOptions.EnableLogging)
+            {
+                LogQueryExecution($"[JadeDbClient] BulkInsertStream<{typeof(T).Name}>({tableName})", (long)Stopwatch.GetElapsedTime(startTimestamp).TotalMilliseconds);
+            }
+
+            return totalInserted;
+        }
+        catch
+        {
+            await transaction.RollbackAsync();
+            throw;
+        }
+    }
+
+    /// <summary>
+    /// Reflection-free bulk insert using generated accessor with progress reporting
+    /// </summary>
+    private async Task<int> BulkInsertWithAccessorAsync<T>(string tableName, IAsyncEnumerable<T> items, BulkInsertAccessor accessor, IProgress<int>? progress, int batchSize)
+    {
+        long startTimestamp = _serviceOptions.EnableLogging ? Stopwatch.GetTimestamp() : 0;
+        var columnNames = accessor.ColumnNames.Select(c => $"`{c}`").ToArray();
+        int totalInserted = 0;
+
+        using var connection = new MySqlConnection(_connectionString);
+        await connection.OpenAsync();
+        using var transaction = await connection.BeginTransactionAsync();
+
+        try
+        {
+            var batch = new List<T>();
+            await foreach (var item in items)
+            {
+                batch.Add(item);
+
+                if (batch.Count >= batchSize)
+                {
+                    await InsertBatchWithAccessorAsync(connection, transaction, tableName, columnNames, accessor, batch);
+                    totalInserted += batch.Count;
+                    progress?.Report(totalInserted);
+                    batch.Clear();
+                }
+            }
+
+            // Insert remaining items
+            if (batch.Count > 0)
+            {
+                await InsertBatchWithAccessorAsync(connection, transaction, tableName, columnNames, accessor, batch);
+                totalInserted += batch.Count;
+                progress?.Report(totalInserted);
+            }
+
+            await transaction.CommitAsync();
+
+            if (_serviceOptions.EnableLogging)
+            {
+                LogQueryExecution($"[JadeDbClient] BulkInsertWithAccessorStream<{typeof(T).Name}>({tableName})", (long)Stopwatch.GetElapsedTime(startTimestamp).TotalMilliseconds);
+            }
+
+            return totalInserted;
+        }
+        catch
+        {
+            await transaction.RollbackAsync();
+            throw;
+        }
+    }
+
+    /// <summary>
+    /// Helper method to insert a batch of items using multi-value INSERT statement.
+    /// </summary>
+    private async Task InsertBatchAsync<T>(MySqlConnection connection, MySqlTransaction transaction,
+        string tableName, string[] columnNames, System.Reflection.PropertyInfo[] properties, List<T> batch)
+    {
+        if (batch.Count == 0) return;
+
+        var columnList = string.Join(", ", columnNames);
+        var valuesList = new List<string>();
+        var parameters = new List<MySqlParameter>();
+
+        for (int i = 0; i < batch.Count; i++)
+        {
+            var paramPlaceholders = new List<string>();
+            for (int j = 0; j < properties.Length; j++)
+            {
+                var paramName = $"@p{i}_{j}";
+                paramPlaceholders.Add(paramName);
+                var value = properties[j].GetValue(batch[i]);
+                parameters.Add(new MySqlParameter(paramName, value ?? DBNull.Value));
+            }
+            valuesList.Add($"({string.Join(", ", paramPlaceholders)})");
+        }
+
+        var insertQuery = $"INSERT INTO `{tableName}` ({columnList}) VALUES {string.Join(", ", valuesList)}";
+
+        using var command = new MySqlCommand(insertQuery, connection, transaction);
+        command.Parameters.AddRange(parameters.ToArray());
+        await command.ExecuteNonQueryAsync();
     }
 
     /// <summary>

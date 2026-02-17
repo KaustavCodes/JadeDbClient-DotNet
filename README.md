@@ -75,6 +75,24 @@ We need these 2 lines
 using JadeDbClient.Initialize;
 ```
 
+### Configuration Options
+
+JadeDbClient supports optional logging configuration for development and debugging:
+
+```csharp
+builder.Services.AddJadeDbService(
+    configure: null, // Mapper configuration (optional)
+    serviceOptionsConfigure: options =>
+    {
+        options.EnableLogging = true;      // Enable timing logs (default: false)
+        options.LogExecutedQuery = true;   // Log SQL queries (default: false)
+    });
+```
+
+**⚠️ Important:** Logging is **disabled by default** for production performance. Enable only during development.
+
+**Backward Compatibility:** Existing code without logging configuration continues to work without any changes.
+
 ### Basic Initialization (Standard Approach)
 
 Initialize the plugin without any custom configuration. The library will use reflection-based mapping automatically:
@@ -380,6 +398,165 @@ string tableName = "tbl_ToInsertInto"; //This will be the name of the table in t
 await _dbConfig.InsertDataTable(tableName, tbl);
 
 ```
+
+### BulkInsertAsync: Stream-based bulk insert with strongly-typed objects
+Bulk inserts a collection or stream of strongly-typed objects into a database table with optimized performance. This method is more flexible than InsertDataTable as it works directly with your model classes and doesn't require creating a DataTable.
+
+**Two overloads available:**
+
+#### 1. IEnumerable<T> Overload
+Method Signature: **Task<int> BulkInsertAsync<T>(string tableName, IEnumerable<T> items, int batchSize = 1000);**
+
+Best for: In-memory collections, lists, arrays
+
+```csharp
+// Example: Bulk insert from a list of objects
+public class Product
+{
+    public int ProductId { get; set; }
+    public string ProductName { get; set; }
+    public decimal Price { get; set; }
+    public int? Stock { get; set; }
+}
+
+// Generate or load your data
+var products = new List<Product>
+{
+    new Product { ProductId = 1, ProductName = "Laptop", Price = 999.99m, Stock = 50 },
+    new Product { ProductId = 2, ProductName = "Mouse", Price = 25.99m, Stock = 200 },
+    new Product { ProductId = 3, ProductName = "Keyboard", Price = 79.99m, Stock = null }
+};
+
+// Bulk insert with default batch size (1000)
+int rowsInserted = await _dbConfig.BulkInsertAsync("Products", products);
+Console.WriteLine($"Inserted {rowsInserted} products");
+
+// Or specify a custom batch size
+int rowsInserted = await _dbConfig.BulkInsertAsync("Products", products, batchSize: 500);
+```
+
+#### 2. IAsyncEnumerable<T> Overload with Progress Reporting
+Method Signature: **Task<int> BulkInsertAsync<T>(string tableName, IAsyncEnumerable<T> items, IProgress<int>? progress = null, int batchSize = 1000);**
+
+Best for: Streaming data from APIs, databases, files, or other async sources
+
+```csharp
+// Example: Stream data from an API and bulk insert with progress reporting
+public async IAsyncEnumerable<Product> FetchProductsFromApiAsync()
+{
+    int page = 1;
+    while (true)
+    {
+        var response = await httpClient.GetAsync($"https://api.example.com/products?page={page}");
+        var products = await response.Content.ReadFromJsonAsync<List<Product>>();
+        
+        if (products == null || products.Count == 0)
+            break;
+            
+        foreach (var product in products)
+        {
+            yield return product;
+        }
+        
+        page++;
+    }
+}
+
+// Bulk insert with progress reporting
+var progress = new Progress<int>(rowCount =>
+{
+    Console.WriteLine($"Inserted {rowCount} rows so far...");
+});
+
+var stream = FetchProductsFromApiAsync();
+int totalInserted = await _dbConfig.BulkInsertAsync("Products", stream, progress, batchSize: 1000);
+Console.WriteLine($"Completed! Total rows inserted: {totalInserted}");
+```
+
+#### Performance Benefits
+
+**Reflection-Free Mode (Recommended):**
+
+When you use `[JadeDbObject]` on your models, bulk insert operations become **reflection-free** and **AOT-compatible**:
+
+```csharp
+using JadeDbClient.Attributes;
+
+// Mark your model with [JadeDbObject] for maximum performance
+[JadeDbObject]
+public partial class Product
+{
+    public int ProductId { get; set; }
+    public string ProductName { get; set; }
+    public decimal Price { get; set; }
+    public int? Stock { get; set; }
+}
+
+// Source generator automatically creates property accessors
+// Bulk insert uses reflection-free path automatically
+var products = GetProducts();
+int inserted = await _dbConfig.BulkInsertAsync("Products", products);
+```
+
+**Benefits of Reflection-Free Mode:**
+- ✅ **Faster Initialization**: No `typeof(T).GetProperties()` calls
+- ✅ **Faster Property Access**: Direct property access via generated delegates
+- ✅ **AOT Compatible**: Works with .NET Native AOT
+- ✅ **Better Performance**: Eliminates reflection overhead
+- ✅ **Zero Configuration**: Just add `[JadeDbObject]` attribute
+
+**Fallback Mode:**
+
+Without `[JadeDbObject]`, bulk insert still works using reflection:
+
+```csharp
+// Works automatically, but uses reflection
+public class Product  // No [JadeDbObject] attribute
+{
+    public int ProductId { get; set; }
+    public string ProductName { get; set; }
+}
+
+// Still works, uses reflection fallback
+await _dbConfig.BulkInsertAsync("Products", products);
+```
+
+**Database-Specific Optimizations:**
+
+**PostgreSQL:**
+- Uses native COPY BINARY protocol
+- Extremely fast, direct streaming
+- Minimal memory overhead
+
+**MySQL:**
+- Optimized batched multi-value INSERT statements
+- Example: `INSERT INTO table VALUES (row1), (row2), (row3)...`
+- Significantly faster than row-by-row inserts
+- Reduces network round-trips
+
+**SQL Server:**
+- Leverages SqlBulkCopy API
+- Batch processing for optimal throughput
+- Native high-performance bulk insert
+
+**Key Features:**
+- ✅ **Memory Efficient**: Streams data instead of loading everything into memory
+- ✅ **Type Safe**: Works directly with your model classes
+- ✅ **Progress Tracking**: Optional IProgress<int> for real-time feedback
+- ✅ **Configurable Batching**: Adjust batch size for your workload
+- ✅ **Async/Await**: Fully asynchronous for non-blocking operations
+- ✅ **Nullable Support**: Handles nullable properties correctly
+- ✅ **Cross-Database**: Same API works across PostgreSQL, MySQL, and SQL Server
+
+#### When to Use Each Method
+
+| Method | Best For | Use Case | Performance |
+|--------|----------|----------|-------------|
+| **InsertDataTable** | Legacy code, DataTable sources | When you already have a DataTable | Good |
+| **BulkInsertAsync (IEnumerable)** | In-memory collections | Bulk insert from lists, arrays, or collections | Fast (Reflection-free with `[JadeDbObject]`) |
+| **BulkInsertAsync (IAsyncEnumerable)** | Streaming sources | API responses, file readers, database streaming | Fast (Reflection-free with `[JadeDbObject]`) |
+
+**Performance Tip:** Always use `[JadeDbObject]` on your models for best performance. The source generator creates reflection-free property accessors at compile time.
 
 ## Database Transactions
 
@@ -692,3 +869,48 @@ warning IL2104: Assembly 'System.Configuration.ConfigurationManager' produced tr
 - **[GitHub Repository](https://github.com/KaustavCodes/JadeDbClient-DotNet)** - Source code and issue tracker
 
 Happy Coding! 
+
+## Performance and Security
+
+### 📊 Performance Report
+
+JadeDbClient includes comprehensive performance testing and benchmarking capabilities. For detailed performance analysis, metrics, and best practices, see:
+
+**[📄 PERFORMANCE_REPORT.md](PERFORMANCE_REPORT.md)** - *Done by GitHub Copilot Agent (Feb 17, 2026)*
+
+**Key Performance Highlights:**
+- **Bulk Insert:** 1.5-10x faster than legacy approaches (database-dependent)
+- **Reflection-Free:** 15-30% improvement with `[JadeDbObject]` attribute
+- **Memory Efficient:** Streaming support for unlimited dataset sizes
+- **Production Ready:** Logging disabled by default for optimal performance
+
+**Benchmark Results (1000 records):**
+- PostgreSQL: 2-3x faster with reflection-free COPY BINARY
+- MySQL: 5-10x faster with batched multi-value INSERT
+- SQL Server: 1.5-2x faster with reflection-free SqlBulkCopy
+
+### 🔒 Security Audit
+
+JadeDbClient has undergone a thorough security review. For the complete security audit, vulnerability assessment, and secure usage guidelines, see:
+
+**[📄 SECURITY_REPORT.md](SECURITY_REPORT.md)** - *Done by GitHub Copilot Agent (Feb 17, 2026)*
+
+**Security Rating:** ✅ **GOOD**
+
+**Key Security Features:**
+- ✅ SQL Injection Prevention (all queries use parameterized queries)
+- ✅ Secure Defaults (logging disabled, no sensitive data exposure)
+- ✅ Input Validation (null checks, type safety)
+- ✅ Encrypted Connections (TLS/SSL support via connection strings)
+- ✅ No Critical or High-severity vulnerabilities
+
+**Security Best Practices:**
+- Use encrypted database connections (TLS/SSL)
+- Store connection strings securely (Azure Key Vault, environment variables)
+- Implement least privilege database access
+- Keep logging disabled in production
+- Update dependencies regularly
+
+## License
+
+This project is licensed under the MIT License.

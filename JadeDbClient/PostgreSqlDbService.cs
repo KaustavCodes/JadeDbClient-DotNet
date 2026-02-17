@@ -5,6 +5,7 @@ using Microsoft.Extensions.Configuration;
 using Npgsql;
 using System.Diagnostics.CodeAnalysis;
 using JadeDbClient.Helpers;
+using System.Diagnostics;
 
 namespace JadeDbClient;
 
@@ -12,17 +13,36 @@ public class PostgreSqlDbService : IDatabaseService
 {
     private readonly string _connectionString;
     private readonly JadeDbMapperOptions _mapperOptions;
+    private readonly JadeDbServiceRegistration.JadeDbServiceOptions _serviceOptions;
     private readonly Mapper _mapper;
 
     public IDbConnection? Connection { get; set; }
 
+    // Backward compatible constructor (for existing users without logging)
     public PostgreSqlDbService(IConfiguration configuration, JadeDbMapperOptions mapperOptions)
+        : this(configuration, mapperOptions, new JadeDbServiceRegistration.JadeDbServiceOptions())
     {
+    }
 
+    public PostgreSqlDbService(IConfiguration configuration, JadeDbMapperOptions mapperOptions, JadeDbServiceRegistration.JadeDbServiceOptions serviceOptions)
+    {
         _connectionString = configuration["ConnectionStrings:DbConnection"]
             ?? throw new InvalidOperationException("Connection string 'ConnectionStrings:DbConnection' not found in configuration.");
         _mapperOptions = mapperOptions ?? throw new ArgumentNullException(nameof(mapperOptions));
-        _mapper = new Mapper(mapperOptions);
+        _serviceOptions = serviceOptions ?? new JadeDbServiceRegistration.JadeDbServiceOptions(); // Default if null
+        _mapper = new Mapper(mapperOptions, _serviceOptions);
+    }
+
+    private void LogQueryExecution(string query, long elapsedMilliseconds)
+    {
+        if (_serviceOptions.EnableLogging)
+        {
+            if (_serviceOptions.LogExecutedQuery)
+            {
+                Console.WriteLine($"[JadeDbClient] [POSTGRES] Executed Query: {query}");
+            }
+            Console.WriteLine($"[JadeDbClient] [POSTGRES] Execution Time: {elapsedMilliseconds} ms");
+        }
     }
 
     /// <summary>
@@ -46,14 +66,14 @@ public class PostgreSqlDbService : IDatabaseService
     }
 
     /// <summary>
-    /// Creates a new instance of an <see cref="IDbDataParameter"/> for SQL Server.
+    /// Creates a new instance of an <see cref="IDbDataParameter"/> for PostgreSQL.
     /// </summary>
     /// <param name="name">The name of the parameter.</param>
     /// <param name="value">The value of the parameter.</param>
     /// <param name="dbType">The <see cref="DbType"/> of the parameter.</param>
     /// <param name="direction">The <see cref="ParameterDirection"/> of the parameter. Default is <see cref="ParameterDirection.Input"/>.</param>
     /// <param name="size">The size of the parameter. Default is 0.</param>
-    /// <returns>A new instance of <see cref="SqlParameter"/> configured with the specified properties.</returns>
+    /// <returns>A new instance of <see cref="NpgsqlParameter"/> configured with the specified properties.</returns>
     public IDbDataParameter GetParameter(string name, object value, DbType dbType, ParameterDirection direction = ParameterDirection.Input, int size = 0)
     {
         return new NpgsqlParameter
@@ -66,8 +86,6 @@ public class PostgreSqlDbService : IDatabaseService
         };
     }
 
-
-
     /// <summary>
     /// Executes a SQL query asynchronously and maps the result to a collection of objects of type T.
     /// </summary>
@@ -75,9 +93,6 @@ public class PostgreSqlDbService : IDatabaseService
     /// <param name="query">The SQL query to be executed.</param>
     /// <param name="parameters">A collection of parameters to be used in the SQL query. Default is null.</param>
     /// <returns>A task representing the asynchronous operation. The task result contains a collection of objects of type T that represent the rows returned by the query.</returns>
-    /// <exception cref="NpgsqlException">Thrown when there is an error executing the query.</exception>
-    /// <exception cref="InvalidOperationException">Thrown when there is an error creating an instance of type T.</exception>
-    /// <exception cref="ArgumentException">Thrown when there is an error setting a property value.</exception>
     public async Task<IEnumerable<T>> ExecuteQueryAsync<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicProperties | DynamicallyAccessedMemberTypes.PublicParameterlessConstructor)] T>(string query, IEnumerable<IDbDataParameter>? parameters = null)
     {
         var results = new List<T>();
@@ -85,6 +100,8 @@ public class PostgreSqlDbService : IDatabaseService
         using (var connection = new NpgsqlConnection(_connectionString))
         {
             await connection.OpenAsync();
+            long startTimestamp = _serviceOptions.EnableLogging ? Stopwatch.GetTimestamp() : 0;
+
             using (var command = new NpgsqlCommand(query, connection))
             {
                 if (parameters != null)
@@ -103,6 +120,11 @@ public class PostgreSqlDbService : IDatabaseService
                     }
                 }
             }
+
+            if (_serviceOptions.EnableLogging)
+            {
+                LogQueryExecution(query, (long)Stopwatch.GetElapsedTime(startTimestamp).TotalMilliseconds);
+            }
         }
 
         return results;
@@ -115,14 +137,13 @@ public class PostgreSqlDbService : IDatabaseService
     /// <param name="query">The SQL query to be executed.</param>
     /// <param name="parameters">A collection of parameters to be used in the SQL query. Default is null.</param>
     /// <returns>A task representing the asynchronous operation. The task result contains a collection of objects of type T that represent the rows returned by the query.</returns>
-    /// <exception cref="NpgsqlException">Thrown when there is an error executing the query.</exception>
-    /// <exception cref="InvalidOperationException">Thrown when there is an error creating an instance of type T.</exception>
-    /// <exception cref="ArgumentException">Thrown when there is an error setting a property value.</exception>
     public async Task<T?> ExecuteQueryFirstRowAsync<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicProperties | DynamicallyAccessedMemberTypes.PublicParameterlessConstructor)] T>(string query, IEnumerable<IDbDataParameter>? parameters = null)
     {
         using (var connection = new NpgsqlConnection(_connectionString))
         {
             await connection.OpenAsync();
+            long startTimestamp = _serviceOptions.EnableLogging ? Stopwatch.GetTimestamp() : 0;
+
             using (var command = new NpgsqlCommand(query, connection))
             {
                 if (parameters != null)
@@ -137,13 +158,23 @@ public class PostgreSqlDbService : IDatabaseService
                 {
                     if (reader.Read())
                     {
-                        return _mapper.MapObject<T>(reader);
+                        var result = _mapper.MapObject<T>(reader);
+                        if (_serviceOptions.EnableLogging)
+                        {
+                            LogQueryExecution(query, (long)Stopwatch.GetElapsedTime(startTimestamp).TotalMilliseconds);
+                        }
+                        return result;
                     }
                 }
             }
+
+            if (_serviceOptions.EnableLogging)
+            {
+                LogQueryExecution(query, (long)Stopwatch.GetElapsedTime(startTimestamp).TotalMilliseconds);
+            }
         }
 
-        return default(T);
+        return default;
     }
 
     /// <summary>
@@ -156,6 +187,8 @@ public class PostgreSqlDbService : IDatabaseService
         using (var connection = new NpgsqlConnection(_connectionString))
         {
             connection.Open();
+            long startTimestamp = _serviceOptions.EnableLogging ? Stopwatch.GetTimestamp() : 0;
+
             using (var command = new NpgsqlCommand(query, connection))
             {
                 if (parameters != null)
@@ -167,6 +200,12 @@ public class PostgreSqlDbService : IDatabaseService
                 }
 
                 var data = await command.ExecuteScalarAsync();
+
+                if (_serviceOptions.EnableLogging)
+                {
+                    LogQueryExecution(query, (long)Stopwatch.GetElapsedTime(startTimestamp).TotalMilliseconds);
+                }
+
                 if (data != null && data != DBNull.Value)
                 {
                     return (T)data;
@@ -186,9 +225,6 @@ public class PostgreSqlDbService : IDatabaseService
     /// <param name="storedProcedureName">The name of the stored procedure to be executed.</param>
     /// <param name="parameters">A collection of parameters to be used in the stored procedure. Default is null.</param>
     /// <returns>A task representing the asynchronous operation. The task result contains a collection of objects of type T that represent the rows returned by the stored procedure.</returns>
-    /// <exception cref="Npgsql.NpgsqlException">Thrown when there is an error executing the stored procedure.</exception>
-    /// <exception cref="InvalidOperationException">Thrown when there is an error creating an instance of type T.</exception>
-    /// <exception cref="ArgumentException">Thrown when there is an error setting a property value.</exception>
     public async Task<IEnumerable<T>> ExecuteStoredProcedureSelectDataAsync<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicProperties | DynamicallyAccessedMemberTypes.PublicParameterlessConstructor)] T>(string storedProcedureName, IEnumerable<IDbDataParameter>? parameters = null)
     {
         var results = new List<T>();
@@ -196,6 +232,8 @@ public class PostgreSqlDbService : IDatabaseService
         using (var connection = new NpgsqlConnection(_connectionString))
         {
             await connection.OpenAsync();
+            long startTimestamp = _serviceOptions.EnableLogging ? Stopwatch.GetTimestamp() : 0;
+
             using (var command = new NpgsqlCommand(storedProcedureName, connection))
             {
                 command.CommandType = CommandType.StoredProcedure;
@@ -216,6 +254,11 @@ public class PostgreSqlDbService : IDatabaseService
                     }
                 }
             }
+
+            if (_serviceOptions.EnableLogging)
+            {
+                LogQueryExecution($"StoredProcedure: {storedProcedureName}", (long)Stopwatch.GetElapsedTime(startTimestamp).TotalMilliseconds);
+            }
         }
 
         return results;
@@ -227,12 +270,13 @@ public class PostgreSqlDbService : IDatabaseService
     /// <param name="storedProcedureName">The name of the stored procedure to be executed.</param>
     /// <param name="parameters">A collection of parameters to be used in the stored procedure. Default is null.</param>
     /// <returns>The number of rows effected after executing the stored procedure.</returns>
-    /// <exception cref="Npgsql.NpgsqlException">Thrown when there is an error executing the stored procedure.</exception>
     public async Task<int> ExecuteStoredProcedureAsync(string storedProcedureName, IEnumerable<IDbDataParameter>? parameters = null)
     {
         using (var connection = new NpgsqlConnection(_connectionString))
         {
             await connection.OpenAsync();
+            long startTimestamp = _serviceOptions.EnableLogging ? Stopwatch.GetTimestamp() : 0;
+
             using (var command = new NpgsqlCommand(storedProcedureName, connection))
             {
                 command.CommandType = CommandType.StoredProcedure;
@@ -247,6 +291,11 @@ public class PostgreSqlDbService : IDatabaseService
 
                 int affectedRows = await command.ExecuteNonQueryAsync();
 
+                if (_serviceOptions.EnableLogging)
+                {
+                    LogQueryExecution($"StoredProcedure: {storedProcedureName}", (long)Stopwatch.GetElapsedTime(startTimestamp).TotalMilliseconds);
+                }
+
                 return affectedRows;
             }
         }
@@ -258,7 +307,6 @@ public class PostgreSqlDbService : IDatabaseService
     /// <param name="storedProcedureName">The name of the stored procedure to be executed.</param>
     /// <param name="parameters">A collection of parameters to be used in the stored procedure. This includes input, output, and input-output parameters.</param>
     /// <returns>A task representing the asynchronous operation. The task result contains a dictionary where the keys are the names of the output parameters and the values are their corresponding values.</returns>
-    /// <exception cref="Npgsql.NpgsqlException">Thrown when there is an error executing the stored procedure.</exception>
     public async Task<Dictionary<string, object>> ExecuteStoredProcedureWithOutputAsync(string storedProcedureName, IEnumerable<IDbDataParameter> parameters)
     {
         var outputValues = new Dictionary<string, object>();
@@ -266,6 +314,8 @@ public class PostgreSqlDbService : IDatabaseService
         using (var connection = new NpgsqlConnection(_connectionString))
         {
             await connection.OpenAsync();
+            long startTimestamp = _serviceOptions.EnableLogging ? Stopwatch.GetTimestamp() : 0;
+
             using (var command = new NpgsqlCommand(storedProcedureName, connection))
             {
                 command.CommandType = CommandType.StoredProcedure;
@@ -287,12 +337,16 @@ public class PostgreSqlDbService : IDatabaseService
                         outputValues.Add(parameter.ParameterName, parameter.Value ?? DBNull.Value);
                     }
                 }
+
+                if (_serviceOptions.EnableLogging)
+                {
+                    LogQueryExecution($"StoredProcedureWithOutput: {storedProcedureName}", (long)Stopwatch.GetElapsedTime(startTimestamp).TotalMilliseconds);
+                }
             }
         }
 
         return outputValues;
     }
-
 
     /// <summary>
     /// Executes a SQL command asynchronously.
@@ -300,12 +354,13 @@ public class PostgreSqlDbService : IDatabaseService
     /// <param name="commandText">The SQL command to be executed.</param>
     /// <param name="parameters">A collection of parameters to be used in the SQL command. Default is null.</param>
     /// <returns>A task representing the asynchronous operation.</returns>
-    /// <exception cref="NpgsqlException">Thrown when there is an error executing the command.</exception>
     public async Task ExecuteCommandAsync(string commandText, IEnumerable<IDbDataParameter>? parameters = null)
     {
         using (var connection = new NpgsqlConnection(_connectionString))
         {
             await connection.OpenAsync();
+            long startTimestamp = _serviceOptions.EnableLogging ? Stopwatch.GetTimestamp() : 0;
+
             using (var command = new NpgsqlCommand(commandText, connection))
             {
                 if (parameters != null)
@@ -317,6 +372,11 @@ public class PostgreSqlDbService : IDatabaseService
                 }
 
                 await command.ExecuteNonQueryAsync();
+            }
+
+            if (_serviceOptions.EnableLogging)
+            {
+                LogQueryExecution(commandText, (long)Stopwatch.GetElapsedTime(startTimestamp).TotalMilliseconds);
             }
         }
     }
@@ -331,6 +391,8 @@ public class PostgreSqlDbService : IDatabaseService
         using var connection = new NpgsqlConnection(_connectionString);
         connection.Open();
 
+        long startTimestamp = _serviceOptions.EnableLogging ? Stopwatch.GetTimestamp() : 0;
+
         // Use COPY command for efficient bulk insertion
         using var writer = connection.BeginBinaryImport($"COPY {tableName} ({string.Join(", ", dataTable.Columns.Cast<DataColumn>().Select(c => c.ColumnName))}) FROM STDIN (FORMAT BINARY)");
 
@@ -344,6 +406,11 @@ public class PostgreSqlDbService : IDatabaseService
         }
 
         writer.Complete();
+
+        if (_serviceOptions.EnableLogging)
+        {
+            LogQueryExecution($"InsertDataTable({tableName})", (long)Stopwatch.GetElapsedTime(startTimestamp).TotalMilliseconds);
+        }
 
         return true;
     }
@@ -360,6 +427,8 @@ public class PostgreSqlDbService : IDatabaseService
     {
         using var connection = new NpgsqlConnection(_connectionString);
         connection.Open();
+
+        long startTimestamp = _serviceOptions.EnableLogging ? Stopwatch.GetTimestamp() : 0;
 
         using var writer = connection.BeginBinaryImport(
             $"COPY {tableName} ({string.Join(", ", dataTable.Columns.Cast<DataColumn>().Select(c => c.ColumnName))}) FROM STDIN (FORMAT BINARY)");
@@ -395,7 +464,247 @@ public class PostgreSqlDbService : IDatabaseService
 
         writer.Complete();
 
+        if (_serviceOptions.EnableLogging)
+        {
+            LogQueryExecution($"InsertDataTableWithJsonData({tableName})", (long)Stopwatch.GetElapsedTime(startTimestamp).TotalMilliseconds);
+        }
+
         return true;
+    }
+
+    /// <summary>
+    /// Bulk inserts a collection of objects into a PostgreSQL table using streaming for memory efficiency.
+    /// </summary>
+    /// <typeparam name="T">The type of objects to insert. Properties should match database column names.</typeparam>
+    /// <param name="tableName">The target database table name.</param>
+    /// <param name="items">The collection of items to insert.</param>
+    /// <param name="batchSize">Number of records to insert per batch (default 1000).</param>
+    /// <returns>The total number of rows inserted.</returns>
+    public async Task<int> BulkInsertAsync<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicProperties)] T>(string tableName, IEnumerable<T> items, int batchSize = 1000)
+    {
+        if (items == null) throw new ArgumentNullException(nameof(items));
+        if (string.IsNullOrWhiteSpace(tableName)) throw new ArgumentException("Table name cannot be null or empty", nameof(tableName));
+
+        long startTimestamp = _serviceOptions.EnableLogging ? Stopwatch.GetTimestamp() : 0;
+        int totalInserted = 0;
+
+        // Try to use generated accessor for reflection-free operation
+        if (JadeDbMapperOptions.TryGetBulkInsertAccessor<T>(out var accessor) && accessor != null)
+        {
+            if (_serviceOptions.EnableLogging)
+            {
+                Console.WriteLine($"[BULK INSERT] Using SOURCE GENERATOR accessor for {typeof(T).Name}");
+            }
+            totalInserted = await BulkInsertWithAccessorAsync(tableName, items, accessor);
+            if (_serviceOptions.EnableLogging)
+            {
+                LogQueryExecution($"[JadeDbClient] BulkInsert<{typeof(T).Name}>({tableName})", (long)Stopwatch.GetElapsedTime(startTimestamp).TotalMilliseconds);
+            }
+            return totalInserted;
+        }
+
+        // Fallback to reflection-based approach
+        if (_serviceOptions.EnableLogging)
+        {
+            Console.WriteLine($"[BULK INSERT] Falling back to REFLECTION for {typeof(T).Name}");
+        }
+        var properties = typeof(T).GetProperties().Where(p => p.CanRead).ToArray();
+        if (properties.Length == 0) throw new InvalidOperationException($"Type {typeof(T).Name} has no readable properties");
+
+        var columnNames = properties.Select(p => p.Name).ToArray();
+
+        using var connection = new NpgsqlConnection(_connectionString);
+        await connection.OpenAsync();
+
+        // Use COPY command for efficient bulk insertion
+        using var writer = connection.BeginBinaryImport($"COPY {tableName} ({string.Join(", ", columnNames)}) FROM STDIN (FORMAT BINARY)");
+
+        foreach (var item in items)
+        {
+            writer.StartRow();
+            foreach (var property in properties)
+            {
+                var value = property.GetValue(item);
+                writer.Write(value ?? DBNull.Value);
+            }
+            totalInserted++;
+        }
+
+        await writer.CompleteAsync();
+
+        if (_serviceOptions.EnableLogging)
+        {
+            LogQueryExecution($"[JadeDbClient] BulkInsert<{typeof(T).Name}>({tableName})", (long)Stopwatch.GetElapsedTime(startTimestamp).TotalMilliseconds);
+        }
+
+        return totalInserted;
+    }
+
+    /// <summary>
+    /// Reflection-free bulk insert using generated accessor
+    /// </summary>
+    private async Task<int> BulkInsertWithAccessorAsync<T>(string tableName, IEnumerable<T> items, BulkInsertAccessor accessor)
+    {
+        long startTimestamp = _serviceOptions.EnableLogging ? Stopwatch.GetTimestamp() : 0;
+        int totalInserted = 0;
+
+        using var connection = new NpgsqlConnection(_connectionString);
+        await connection.OpenAsync();
+
+        using var writer = connection.BeginBinaryImport($"COPY {tableName} ({string.Join(", ", accessor.ColumnNames)}) FROM STDIN (FORMAT BINARY)");
+
+        foreach (var item in items)
+        {
+            writer.StartRow();
+            var values = accessor.GetValues(item!);
+            foreach (var value in values)
+            {
+                writer.Write(value ?? DBNull.Value);
+            }
+            totalInserted++;
+        }
+
+        await writer.CompleteAsync();
+
+        if (_serviceOptions.EnableLogging)
+        {
+            LogQueryExecution($"[JadeDbClient] BulkInsertWithAccessor<{typeof(T).Name}>({tableName})", (long)Stopwatch.GetElapsedTime(startTimestamp).TotalMilliseconds);
+        }
+
+        return totalInserted;
+    }
+
+    /// <summary>
+    /// Bulk inserts a stream of objects into a PostgreSQL table with progress reporting.
+    /// </summary>
+    /// <typeparam name="T">The type of objects to insert. Properties should match database column names.</typeparam>
+    /// <param name="tableName">The target database table name.</param>
+    /// <param name="items">The async enumerable stream of items to insert.</param>
+    /// <param name="progress">Optional progress reporter that receives the count of rows inserted.</param>
+    /// <param name="batchSize">Number of records to insert per batch (default 1000).</param>
+    /// <returns>The total number of rows inserted.</returns>
+    public async Task<int> BulkInsertAsync<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicProperties)] T>(string tableName, IAsyncEnumerable<T> items, IProgress<int>? progress = null, int batchSize = 1000)
+    {
+        if (items == null) throw new ArgumentNullException(nameof(items));
+        if (string.IsNullOrWhiteSpace(tableName)) throw new ArgumentException("Table name cannot be null or empty", nameof(tableName));
+
+        long startTimestamp = _serviceOptions.EnableLogging ? Stopwatch.GetTimestamp() : 0;
+        int totalInserted = 0;
+        int batchCount = 0;
+
+        // Try to use generated accessor for reflection-free operation
+        if (JadeDbMapperOptions.TryGetBulkInsertAccessor<T>(out var accessor) && accessor != null)
+        {
+            if (_serviceOptions.EnableLogging)
+            {
+                Console.WriteLine($"[BULK INSERT STREAM] Using SOURCE GENERATOR accessor for {typeof(T).Name}");
+            }
+            totalInserted = await BulkInsertWithAccessorAsync(tableName, items, accessor, progress, batchSize);
+            if (_serviceOptions.EnableLogging)
+            {
+                LogQueryExecution($"[JadeDbClient] BulkInsertStream<{typeof(T).Name}>({tableName})", (long)Stopwatch.GetElapsedTime(startTimestamp).TotalMilliseconds);
+            }
+            return totalInserted;
+        }
+
+        // Fallback to reflection-based approach
+        if (_serviceOptions.EnableLogging)
+        {
+            Console.WriteLine($"[BULK INSERT STREAM] Falling back to REFLECTION for {typeof(T).Name}");
+        }
+        var properties = typeof(T).GetProperties().Where(p => p.CanRead).ToArray();
+        if (properties.Length == 0) throw new InvalidOperationException($"Type {typeof(T).Name} has no readable properties");
+
+        var columnNames = properties.Select(p => p.Name).ToArray();
+
+        using var connection = new NpgsqlConnection(_connectionString);
+        await connection.OpenAsync();
+
+        // Use COPY command for efficient bulk insertion
+        using var writer = connection.BeginBinaryImport($"COPY {tableName} ({string.Join(", ", columnNames)}) FROM STDIN (FORMAT BINARY)");
+
+        await foreach (var item in items)
+        {
+            writer.StartRow();
+            foreach (var property in properties)
+            {
+                var value = property.GetValue(item);
+                writer.Write(value ?? DBNull.Value);
+            }
+            totalInserted++;
+            batchCount++;
+
+            // Report progress at batch intervals
+            if (progress != null && batchCount >= batchSize)
+            {
+                progress.Report(totalInserted);
+                batchCount = 0;
+            }
+        }
+
+        await writer.CompleteAsync();
+
+        // Report final progress
+        if (progress != null && batchCount > 0)
+        {
+            progress.Report(totalInserted);
+        }
+
+        if (_serviceOptions.EnableLogging)
+        {
+            LogQueryExecution($"[JadeDbClient] BulkInsertStream<{typeof(T).Name}>({tableName})", (long)Stopwatch.GetElapsedTime(startTimestamp).TotalMilliseconds);
+        }
+
+        return totalInserted;
+    }
+
+    /// <summary>
+    /// Reflection-free bulk insert using generated accessor with progress reporting
+    /// </summary>
+    private async Task<int> BulkInsertWithAccessorAsync<T>(string tableName, IAsyncEnumerable<T> items, BulkInsertAccessor accessor, IProgress<int>? progress, int batchSize)
+    {
+        long startTimestamp = _serviceOptions.EnableLogging ? Stopwatch.GetTimestamp() : 0;
+        int totalInserted = 0;
+        int batchCount = 0;
+
+        using var connection = new NpgsqlConnection(_connectionString);
+        await connection.OpenAsync();
+
+        using var writer = connection.BeginBinaryImport($"COPY {tableName} ({string.Join(", ", accessor.ColumnNames)}) FROM STDIN (FORMAT BINARY)");
+
+        await foreach (var item in items)
+        {
+            writer.StartRow();
+            var values = accessor.GetValues(item!);
+            foreach (var value in values)
+            {
+                writer.Write(value ?? DBNull.Value);
+            }
+            totalInserted++;
+            batchCount++;
+
+            // Report progress at batch intervals
+            if (progress != null && batchCount >= batchSize)
+            {
+                progress.Report(totalInserted);
+                batchCount = 0;
+            }
+        }
+
+        await writer.CompleteAsync();
+
+        // Report final progress
+        if (progress != null && batchCount > 0)
+        {
+            progress.Report(totalInserted);
+        }
+
+        if (_serviceOptions.EnableLogging)
+        {
+            LogQueryExecution($"[JadeDbClient] BulkStreamInsert<{typeof(T).Name}>({tableName})", (long)Stopwatch.GetElapsedTime(startTimestamp).TotalMilliseconds);
+        }
+
+        return totalInserted;
     }
 
     /// <summary>
