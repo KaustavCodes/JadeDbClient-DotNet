@@ -19,12 +19,18 @@ public class MsSqlDbService : IDatabaseService
 
     private readonly Mapper _mapper;
 
+    // Backward compatible constructor (for existing users without logging)
+    public MsSqlDbService(IConfiguration configuration, JadeDbMapperOptions mapperOptions)
+        : this(configuration, mapperOptions, new JadeDbServiceRegistration.JadeDbServiceOptions())
+    {
+    }
+
     public MsSqlDbService(IConfiguration configuration, JadeDbMapperOptions mapperOptions, JadeDbServiceRegistration.JadeDbServiceOptions serviceOptions)
     {
         _connectionString = configuration["ConnectionStrings:DbConnection"]
             ?? throw new InvalidOperationException("Connection string 'ConnectionStrings:DbConnection' not found in configuration.");
         _mapperOptions = mapperOptions ?? throw new ArgumentNullException(nameof(mapperOptions));
-        _serviceOptions = serviceOptions ?? throw new ArgumentNullException(nameof(serviceOptions));
+        _serviceOptions = serviceOptions ?? new JadeDbServiceRegistration.JadeDbServiceOptions(); // Default if null
         _mapper = new Mapper(_mapperOptions, _serviceOptions);
     }
 
