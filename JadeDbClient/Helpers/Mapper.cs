@@ -2,8 +2,10 @@ using System;
 using System.Data;
 using System.Diagnostics.CodeAnalysis;
 using JadeDbClient.Initialize;
+using JadeDbClient.Attributes;
 
 using System.Collections.Concurrent;
+using System.Linq;
 
 namespace JadeDbClient.Helpers;
 
@@ -42,7 +44,19 @@ internal class Mapper
     internal T MapObjectReflection<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicProperties | DynamicallyAccessedMemberTypes.PublicParameterlessConstructor)] T>(IDataReader reader)
     {
         var properties = typeof(T).GetProperties();
-        var propertyDict = properties.ToDictionary(p => p.Name, StringComparer.OrdinalIgnoreCase);
+        
+        // Build a dictionary that maps column names to properties, respecting JadeDbColumnAttribute
+        var propertyDict = new Dictionary<string, System.Reflection.PropertyInfo>(StringComparer.OrdinalIgnoreCase);
+        foreach (var property in properties)
+        {
+            // Check for JadeDbColumnAttribute
+            var columnAttr = property.GetCustomAttributes(typeof(JadeDbColumnAttribute), true)
+                .FirstOrDefault() as JadeDbColumnAttribute;
+            
+            var columnName = columnAttr?.ColumnName ?? property.Name;
+            propertyDict[columnName] = property;
+        }
+        
         T instance = Activator.CreateInstance<T>();
 
         for (int i = 0; i < reader.FieldCount; i++)
