@@ -84,6 +84,8 @@ Initialize the plugin without any custom configuration. The library will use ref
 builder.Services.AddJadeDbService();
 ```
 
+**This is the standard approach that works for all .NET applications. Your existing code will continue to work without any changes.**
+
 ### Configuration Options
 
 JadeDbClient supports optional logging configuration for development and debugging:
@@ -101,8 +103,6 @@ builder.Services.AddJadeDbService(
 **⚠️ Important:** Logging is **disabled by default** for production performance. Enable only during development.
 
 **Backward Compatibility:** Existing code without logging configuration continues to work without any changes.
-
-**This is the standard approach that works for all .NET applications. Your existing code will continue to work without any changes.**
 
 ### Advanced: AOT-Compatible Mappers with Source Generator
 
