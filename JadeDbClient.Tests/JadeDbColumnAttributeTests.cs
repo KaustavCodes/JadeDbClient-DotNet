@@ -212,6 +212,35 @@ public class JadeDbColumnAttributeTests
         result.UserName.Should().BeEmpty(); // Default value
         result.EmailAddress.Should().BeEmpty(); // Default value
     }
+    
+    /// <summary>
+    /// Test that nullable properties remain null when columns are missing
+    /// </summary>
+    [Fact]
+    public void ReflectionMapper_WithMissingNullableColumns_LeavesNullValues()
+    {
+        // Arrange
+        var mockReader = new Mock<IDataReader>();
+        
+        mockReader.Setup(r => r.FieldCount).Returns(1);
+        mockReader.Setup(r => r.GetName(0)).Returns("order_id");
+        
+        mockReader.Setup(r => r[0]).Returns(100);
+        mockReader.Setup(r => r.IsDBNull(It.IsAny<int>())).Returns(false);
+        
+        var mapperOptions = new JadeDbMapperOptions();
+        var mapper = new Mapper(mapperOptions);
+        
+        // Act
+        var result = mapper.MapObjectReflection<OrderWithNullableColumns>(mockReader.Object);
+        
+        // Assert
+        result.Should().NotBeNull();
+        result.OrderId.Should().Be(100);
+        result.CustomerId.Should().BeNull(); // Nullable int remains null
+        result.OrderDate.Should().BeNull(); // Nullable DateTime remains null
+        result.Notes.Should().BeNull(); // Nullable string remains null
+    }
 }
 
 // Test Models
@@ -239,4 +268,19 @@ public class ProductWithMixedAttributes
     
     [JadeDbColumn("unit_price")]
     public decimal UnitPrice { get; set; }
+}
+
+public class OrderWithNullableColumns
+{
+    [JadeDbColumn("order_id")]
+    public int OrderId { get; set; }
+    
+    [JadeDbColumn("customer_id")]
+    public int? CustomerId { get; set; }
+    
+    [JadeDbColumn("order_date")]
+    public DateTime? OrderDate { get; set; }
+    
+    [JadeDbColumn("notes")]
+    public string? Notes { get; set; }
 }

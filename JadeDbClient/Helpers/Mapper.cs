@@ -6,6 +6,7 @@ using JadeDbClient.Attributes;
 
 using System.Collections.Concurrent;
 using System.Linq;
+using System.Reflection;
 
 namespace JadeDbClient.Helpers;
 
@@ -15,7 +16,7 @@ internal class Mapper
     private readonly JadeDbServiceRegistration.JadeDbServiceOptions? _serviceOptions;
     
     // Cache for property-to-column-name mappings per type
-    private static readonly ConcurrentDictionary<Type, Dictionary<string, System.Reflection.PropertyInfo>> _propertyColumnCache = new();
+    private static readonly ConcurrentDictionary<Type, Dictionary<string, PropertyInfo>> _propertyColumnCache = new();
 
     public Mapper(JadeDbMapperOptions mapperOptions, JadeDbServiceRegistration.JadeDbServiceOptions? serviceOptions = null)
     {
@@ -50,7 +51,7 @@ internal class Mapper
         var propertyDict = _propertyColumnCache.GetOrAdd(typeof(T), type =>
         {
             var properties = type.GetProperties();
-            var dict = new Dictionary<string, System.Reflection.PropertyInfo>(StringComparer.OrdinalIgnoreCase);
+            var dict = new Dictionary<string, PropertyInfo>(StringComparer.OrdinalIgnoreCase);
             
             foreach (var property in properties)
             {
