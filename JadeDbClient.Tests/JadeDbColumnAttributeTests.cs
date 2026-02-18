@@ -279,6 +279,41 @@ public class JadeDbColumnAttributeTests
         result.OrderDate.Should().BeNull(); // DBNull for nullable DateTime
         result.Notes.Should().BeNull(); // DBNull for nullable string
     }
+    
+    /// <summary>
+    /// Test that demonstrates DataModel scenario with database column "name" mapped to property "FullName"
+    /// This simulates the real-world ApiAotTester scenario
+    /// </summary>
+    [Fact]
+    public void SourceGeneratorMapper_WithDatabaseColumnNameMappedToFullName_WorksCorrectly()
+    {
+        // Arrange - Simulate database returning "id" and "name" columns
+        var mockReader = new Mock<IDataReader>();
+        
+        mockReader.Setup(r => r.GetOrdinal("id")).Returns(0);
+        mockReader.Setup(r => r.GetOrdinal("name")).Returns(1);
+        
+        mockReader.Setup(r => r.GetInt32(0)).Returns(42);
+        mockReader.Setup(r => r.GetString(1)).Returns("John Doe");
+        mockReader.Setup(r => r.IsDBNull(It.IsAny<int>())).Returns(false);
+        
+        // Simulate source generator mapper that uses JadeDbColumn mapping
+        JadeDbMapperOptions.RegisterGlobalMapper<DataModelWithColumnMapping>(reader => new DataModelWithColumnMapping
+        {
+            Id = reader.GetInt32(reader.GetOrdinal("id")),
+            FullName = reader.IsDBNull(reader.GetOrdinal("name")) ? null : reader.GetString(reader.GetOrdinal("name"))
+        });
+        
+        var mapperOptions = new JadeDbMapperOptions();
+        
+        // Act
+        var result = mapperOptions.ExecuteMapper<DataModelWithColumnMapping>(mockReader.Object);
+        
+        // Assert
+        result.Should().NotBeNull();
+        result!.Id.Should().Be(42);
+        result.FullName.Should().Be("John Doe");
+    }
 }
 
 // Test Models
@@ -321,4 +356,14 @@ public class OrderWithNullableColumns
     
     [JadeDbColumn("notes")]
     public string? Notes { get; set; }
+}
+
+// Simulates the ApiAotTester DataModel scenario
+[JadeDbObject]
+public partial class DataModelWithColumnMapping
+{
+    public int Id { get; set; }
+    
+    [JadeDbColumn("name")]
+    public string? FullName { get; set; }
 }
