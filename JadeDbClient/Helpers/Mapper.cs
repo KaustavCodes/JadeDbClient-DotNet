@@ -13,6 +13,9 @@ internal class Mapper
 {
     private readonly JadeDbMapperOptions _mapperOptions;
     private readonly JadeDbServiceRegistration.JadeDbServiceOptions? _serviceOptions;
+    
+    // Cache for property-to-column-name mappings per type
+    private static readonly ConcurrentDictionary<Type, Dictionary<string, System.Reflection.PropertyInfo>> _propertyColumnCache = new();
 
     public Mapper(JadeDbMapperOptions mapperOptions, JadeDbServiceRegistration.JadeDbServiceOptions? serviceOptions = null)
     {
@@ -43,19 +46,24 @@ internal class Mapper
     // [RequiresDynamicCode("Reflection-based mapping requires dynamic code access.")]
     internal T MapObjectReflection<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicProperties | DynamicallyAccessedMemberTypes.PublicParameterlessConstructor)] T>(IDataReader reader)
     {
-        var properties = typeof(T).GetProperties();
-        
-        // Build a dictionary that maps column names to properties, respecting JadeDbColumnAttribute
-        var propertyDict = new Dictionary<string, System.Reflection.PropertyInfo>(StringComparer.OrdinalIgnoreCase);
-        foreach (var property in properties)
+        // Get or create cached property-to-column-name mappings for this type
+        var propertyDict = _propertyColumnCache.GetOrAdd(typeof(T), type =>
         {
-            // Check for JadeDbColumnAttribute
-            var columnAttr = property.GetCustomAttributes(typeof(JadeDbColumnAttribute), true)
-                .FirstOrDefault() as JadeDbColumnAttribute;
+            var properties = type.GetProperties();
+            var dict = new Dictionary<string, System.Reflection.PropertyInfo>(StringComparer.OrdinalIgnoreCase);
             
-            var columnName = columnAttr?.ColumnName ?? property.Name;
-            propertyDict[columnName] = property;
-        }
+            foreach (var property in properties)
+            {
+                // Check for JadeDbColumnAttribute
+                var columnAttr = property.GetCustomAttributes(typeof(JadeDbColumnAttribute), true)
+                    .FirstOrDefault() as JadeDbColumnAttribute;
+                
+                var columnName = columnAttr?.ColumnName ?? property.Name;
+                dict[columnName] = property;
+            }
+            
+            return dict;
+        });
         
         T instance = Activator.CreateInstance<T>();
 
