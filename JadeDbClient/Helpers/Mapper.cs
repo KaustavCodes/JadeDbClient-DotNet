@@ -16,6 +16,7 @@ internal class Mapper
     private readonly JadeDbServiceRegistration.JadeDbServiceOptions? _serviceOptions;
     
     // Cache for property-to-column-name mappings per type
+    // Note: The inner Dictionary is immutable after creation, making this thread-safe
     private static readonly ConcurrentDictionary<Type, Dictionary<string, PropertyInfo>> _propertyColumnCache = new();
 
     public Mapper(JadeDbMapperOptions mapperOptions, JadeDbServiceRegistration.JadeDbServiceOptions? serviceOptions = null)

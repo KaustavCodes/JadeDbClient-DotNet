@@ -241,6 +241,44 @@ public class JadeDbColumnAttributeTests
         result.OrderDate.Should().BeNull(); // Nullable DateTime remains null
         result.Notes.Should().BeNull(); // Nullable string remains null
     }
+    
+    /// <summary>
+    /// Test that DBNull values are correctly handled for properties with JadeDbColumnAttribute
+    /// </summary>
+    [Fact]
+    public void ReflectionMapper_WithDBNullForAttributedColumns_SetsNullValues()
+    {
+        // Arrange
+        var mockReader = new Mock<IDataReader>();
+        
+        mockReader.Setup(r => r.FieldCount).Returns(4);
+        mockReader.Setup(r => r.GetName(0)).Returns("order_id");
+        mockReader.Setup(r => r.GetName(1)).Returns("customer_id");
+        mockReader.Setup(r => r.GetName(2)).Returns("order_date");
+        mockReader.Setup(r => r.GetName(3)).Returns("notes");
+        
+        // Order ID has a value
+        mockReader.Setup(r => r.IsDBNull(0)).Returns(false);
+        mockReader.Setup(r => r[0]).Returns(200);
+        
+        // All other columns are DBNull
+        mockReader.Setup(r => r.IsDBNull(1)).Returns(true);
+        mockReader.Setup(r => r.IsDBNull(2)).Returns(true);
+        mockReader.Setup(r => r.IsDBNull(3)).Returns(true);
+        
+        var mapperOptions = new JadeDbMapperOptions();
+        var mapper = new Mapper(mapperOptions);
+        
+        // Act
+        var result = mapper.MapObjectReflection<OrderWithNullableColumns>(mockReader.Object);
+        
+        // Assert
+        result.Should().NotBeNull();
+        result.OrderId.Should().Be(200);
+        result.CustomerId.Should().BeNull(); // DBNull for nullable int
+        result.OrderDate.Should().BeNull(); // DBNull for nullable DateTime
+        result.Notes.Should().BeNull(); // DBNull for nullable string
+    }
 }
 
 // Test Models
