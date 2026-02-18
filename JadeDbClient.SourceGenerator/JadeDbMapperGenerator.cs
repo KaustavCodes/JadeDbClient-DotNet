@@ -130,7 +130,7 @@ namespace JadeDbClient.SourceGenerator
             if (readableProps.Length == 0) return;
 
             sb.AppendLine($"        JadeDbMapperOptions.RegisterBulkInsertAccessor<{model.FullName}>(");
-            sb.AppendLine($"            columnNames: new[] {{ {string.Join(", ", readableProps.Select(p => $"\"{p.Name}\""))} }},");
+            sb.AppendLine($"            columnNames: new[] {{ {string.Join(", ", readableProps.Select(p => $"\"{p.ColumnName}\""))} }},");
             sb.AppendLine($"            accessor: ({model.FullName} model_obj) => new object?[] {{ {string.Join(", ", readableProps.Select(p => $"model_obj.{p.Name}"))} }}");
             sb.AppendLine("        );");
         }

@@ -2,8 +2,11 @@ using System;
 using System.Data;
 using System.Diagnostics.CodeAnalysis;
 using JadeDbClient.Initialize;
+using JadeDbClient.Attributes;
 
 using System.Collections.Concurrent;
+using System.Linq;
+using System.Reflection;
 
 namespace JadeDbClient.Helpers;
 
@@ -11,6 +14,10 @@ internal class Mapper
 {
     private readonly JadeDbMapperOptions _mapperOptions;
     private readonly JadeDbServiceRegistration.JadeDbServiceOptions? _serviceOptions;
+    
+    // Cache for property-to-column-name mappings per type
+    // Note: The inner Dictionary is immutable after creation, making this thread-safe
+    private static readonly ConcurrentDictionary<Type, Dictionary<string, PropertyInfo>> _propertyColumnCache = new();
 
     public Mapper(JadeDbMapperOptions mapperOptions, JadeDbServiceRegistration.JadeDbServiceOptions? serviceOptions = null)
     {
@@ -41,8 +48,25 @@ internal class Mapper
     // [RequiresDynamicCode("Reflection-based mapping requires dynamic code access.")]
     internal T MapObjectReflection<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicProperties | DynamicallyAccessedMemberTypes.PublicParameterlessConstructor)] T>(IDataReader reader)
     {
-        var properties = typeof(T).GetProperties();
-        var propertyDict = properties.ToDictionary(p => p.Name, StringComparer.OrdinalIgnoreCase);
+        // Get or create cached property-to-column-name mappings for this type
+        var propertyDict = _propertyColumnCache.GetOrAdd(typeof(T), type =>
+        {
+            var properties = type.GetProperties();
+            var dict = new Dictionary<string, PropertyInfo>(StringComparer.OrdinalIgnoreCase);
+            
+            foreach (var property in properties)
+            {
+                // Check for JadeDbColumnAttribute
+                var columnAttr = property.GetCustomAttributes(typeof(JadeDbColumnAttribute), true)
+                    .FirstOrDefault() as JadeDbColumnAttribute;
+                
+                var columnName = columnAttr?.ColumnName ?? property.Name;
+                dict[columnName] = property;
+            }
+            
+            return dict;
+        });
+        
         T instance = Activator.CreateInstance<T>();
 
         for (int i = 0; i < reader.FieldCount; i++)

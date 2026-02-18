@@ -15,6 +15,7 @@
 - **Stored Procedure Support**: Execute stored procedures across different databases without rewriting code.
 - **Transaction Support**: Full support for database transactions with commit and rollback capabilities across all database types.
 - **🚀 Source Generator for AOT**: Automatically generates optimized mappers at compile-time with the `[JadeDbObject]` attribute - no manual registration needed!
+- **Custom Column Mapping**: Use `[JadeDbColumn]` attribute to map database column names (e.g., snake_case) to C# property names (e.g., PascalCase).
 - **Native AOT Compatible**: Designed for .NET Native AOT applications with compile-time code generation (Note: Underlying database drivers may still have AOT limitations).
 - **Consistent API**: Provides a unified API to eliminate the headaches of switching databases.
 
@@ -201,11 +202,72 @@ public partial class Product
 
 When the database returns `DBNull`, the generated mapper assigns `null` for nullable types and appropriate defaults for non-nullable types.
 
+#### Custom Column Name Mapping with `[JadeDbColumn]`
+
+Sometimes your database column names don't match your C# property names (e.g., snake_case in database vs PascalCase in C#). Use the `[JadeDbColumn]` attribute to map them:
+
+```csharp
+using JadeDbClient.Attributes;
+
+[JadeDbObject]
+public partial class User
+{
+    [JadeDbColumn("user_id")]
+    public int UserId { get; set; }
+    
+    [JadeDbColumn("user_name")]
+    public string UserName { get; set; } = string.Empty;
+    
+    [JadeDbColumn("email_address")]
+    public string EmailAddress { get; set; } = string.Empty;
+    
+    [JadeDbColumn("is_active")]
+    public bool IsActive { get; set; }
+    
+    [JadeDbColumn("created_at")]
+    public DateTime CreatedAt { get; set; }
+}
+```
+
+**Real-world example:**
+```sql
+-- Database table with snake_case columns
+CREATE TABLE users (
+    user_id INT PRIMARY KEY,
+    user_name VARCHAR(100),
+    email_address VARCHAR(255),
+    is_active BOOLEAN,
+    created_at TIMESTAMP
+);
+```
+
+The `[JadeDbColumn]` attribute works in:
+- ✅ **Source Generator Mappers**: Column names used in generated `GetOrdinal()` calls
+- ✅ **Bulk Insert Operations**: Correct column names in INSERT statements
+- ✅ **Reflection Fallback**: Cached lookups for performance
+
+**Mixed Mapping Example:**
+```csharp
+[JadeDbObject]
+public partial class Product
+{
+    [JadeDbColumn("product_id")]
+    public int ProductId { get; set; }
+    
+    // No attribute - uses property name "ProductName"
+    public string ProductName { get; set; } = string.Empty;
+    
+    [JadeDbColumn("unit_price")]
+    public decimal UnitPrice { get; set; }
+}
+```
+
 **Benefits of the Source Generator Approach:**
 - ✅ Works in .NET Native AOT (tested with SQL Server, MySQL, PostgreSQL)
 - ✅ Better performance (no reflection overhead)
 - ✅ Compile-time type safety
 - ✅ Automatic null handling
+- ✅ Custom column name mapping with `[JadeDbColumn]`
 - ✅ Compatible with standard JIT builds
 - ✅ Mix and match approaches as needed
 
