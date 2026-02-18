@@ -518,8 +518,9 @@ static DataTable ProductsToDataTable(List<Product> products)
 [JadeDbObject]
 public partial class DataModel
 {
+    [JadeDbColumn("id")]
     public int Id { get; set; }
-    
+
     [JadeDbColumn("name")]
     public string? FullName { get; set; }
 }
