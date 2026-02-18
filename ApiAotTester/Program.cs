@@ -518,8 +518,8 @@ static DataTable ProductsToDataTable(List<Product> products)
 [JadeDbObject]
 public partial class DataModel
 {
-    public int id { get; set; }
-    public string? name { get; set; }
+    public int Id { get; set; }
+    public string? FullName { get; set; }
 }
 
 // UserModel does NOT have a pre-compiled mapper - uses reflection fallback
