@@ -75,6 +75,17 @@ We need these 2 lines
 using JadeDbClient.Initialize;
 ```
 
+### Basic Initialization (Standard Approach)
+
+Initialize the plugin without any custom configuration. The library will use reflection-based mapping automatically:
+
+```csharp
+// Call the method to add the database service
+builder.Services.AddJadeDbService();
+```
+
+**This is the standard approach that works for all .NET applications. Your existing code will continue to work without any changes.**
+
 ### Configuration Options
 
 JadeDbClient supports optional logging configuration for development and debugging:
@@ -92,17 +103,6 @@ builder.Services.AddJadeDbService(
 **⚠️ Important:** Logging is **disabled by default** for production performance. Enable only during development.
 
 **Backward Compatibility:** Existing code without logging configuration continues to work without any changes.
-
-### Basic Initialization (Standard Approach)
-
-Initialize the plugin without any custom configuration. The library will use reflection-based mapping automatically:
-
-```csharp
-// Call the method to add the database service
-builder.Services.AddJadeDbService();
-```
-
-**This is the standard approach that works for all .NET applications. Your existing code will continue to work without any changes.**
 
 ### Advanced: AOT-Compatible Mappers with Source Generator
 
@@ -869,47 +869,6 @@ warning IL2104: Assembly 'System.Configuration.ConfigurationManager' produced tr
 - **[GitHub Repository](https://github.com/KaustavCodes/JadeDbClient-DotNet)** - Source code and issue tracker
 
 Happy Coding! 
-
-## Performance and Security
-
-### 📊 Performance Report
-
-JadeDbClient includes comprehensive performance testing and benchmarking capabilities. For detailed performance analysis, metrics, and best practices, see:
-
-**[📄 PERFORMANCE_REPORT.md](PERFORMANCE_REPORT.md)** - *Done by GitHub Copilot Agent (Feb 17, 2026)*
-
-**Key Performance Highlights:**
-- **Bulk Insert:** 1.5-10x faster than legacy approaches (database-dependent)
-- **Reflection-Free:** 15-30% improvement with `[JadeDbObject]` attribute
-- **Memory Efficient:** Streaming support for unlimited dataset sizes
-- **Production Ready:** Logging disabled by default for optimal performance
-
-**Benchmark Results (1000 records):**
-- PostgreSQL: 2-3x faster with reflection-free COPY BINARY
-- MySQL: 5-10x faster with batched multi-value INSERT
-- SQL Server: 1.5-2x faster with reflection-free SqlBulkCopy
-
-### 🔒 Security Audit
-
-JadeDbClient has undergone a thorough security review. For the complete security audit, vulnerability assessment, and secure usage guidelines, see:
-
-**[📄 SECURITY_REPORT.md](SECURITY_REPORT.md)** - *Done by GitHub Copilot Agent (Feb 17, 2026)*
-
-**Security Rating:** ✅ **GOOD**
-
-**Key Security Features:**
-- ✅ SQL Injection Prevention (all queries use parameterized queries)
-- ✅ Secure Defaults (logging disabled, no sensitive data exposure)
-- ✅ Input Validation (null checks, type safety)
-- ✅ Encrypted Connections (TLS/SSL support via connection strings)
-- ✅ No Critical or High-severity vulnerabilities
-
-**Security Best Practices:**
-- Use encrypted database connections (TLS/SSL)
-- Store connection strings securely (Azure Key Vault, environment variables)
-- Implement least privilege database access
-- Keep logging disabled in production
-- Update dependencies regularly
 
 ## License
 
