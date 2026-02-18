@@ -75,6 +75,15 @@ We need these 2 lines
 using JadeDbClient.Initialize;
 ```
 
+### Basic Initialization (Standard Approach)
+
+Initialize the plugin without any custom configuration. The library will use reflection-based mapping automatically:
+
+```csharp
+// Call the method to add the database service
+builder.Services.AddJadeDbService();
+```
+
 ### Configuration Options
 
 JadeDbClient supports optional logging configuration for development and debugging:
@@ -92,15 +101,6 @@ builder.Services.AddJadeDbService(
 **⚠️ Important:** Logging is **disabled by default** for production performance. Enable only during development.
 
 **Backward Compatibility:** Existing code without logging configuration continues to work without any changes.
-
-### Basic Initialization (Standard Approach)
-
-Initialize the plugin without any custom configuration. The library will use reflection-based mapping automatically:
-
-```csharp
-// Call the method to add the database service
-builder.Services.AddJadeDbService();
-```
 
 **This is the standard approach that works for all .NET applications. Your existing code will continue to work without any changes.**
 
