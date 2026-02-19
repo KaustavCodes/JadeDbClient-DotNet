@@ -15,7 +15,7 @@ internal static class ReflectionHelper
     /// </summary>
     /// <param name="property">The property to get the column name for.</param>
     /// <returns>The database column name (from JadeDbColumn attribute or property name).</returns>
-    public static string GetColumnName(PropertyInfo property)
+    internal static string GetColumnName(PropertyInfo property)
     {
         var columnAttribute = property.GetCustomAttribute<JadeDbColumnAttribute>();
         return columnAttribute?.ColumnName ?? property.Name;
@@ -26,7 +26,7 @@ internal static class ReflectionHelper
     /// </summary>
     /// <param name="properties">The properties to get column names for.</param>
     /// <returns>An array of database column names.</returns>
-    public static string[] GetColumnNames(PropertyInfo[] properties)
+    internal static string[] GetColumnNames(PropertyInfo[] properties)
     {
         return properties.Select(GetColumnName).ToArray();
     }
