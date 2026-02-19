@@ -16,8 +16,10 @@
 - **Transaction Support**: Full support for database transactions with commit and rollback capabilities across all database types.
 - **🚀 Source Generator for AOT**: Automatically generates optimized mappers at compile-time with the `[JadeDbObject]` attribute - no manual registration needed!
 - **Custom Column Mapping**: Use `[JadeDbColumn]` attribute to map database column names (e.g., snake_case) to C# property names (e.g., PascalCase).
+- **Custom Table Mapping**: Use `[JadeDbTable]` attribute to map a C# class to a custom database table name.
 - **Native AOT Compatible**: Designed for .NET Native AOT applications with compile-time code generation (Note: Underlying database drivers may still have AOT limitations).
 - **Consistent API**: Provides a unified API to eliminate the headaches of switching databases.
+- **⚠️ Query Builder *(Beta)***: Fluent, type-safe SELECT / INSERT / UPDATE / DELETE query construction — see [beta notice](#-query-builder-beta) below before using in production.
 
 ## Installation
 
@@ -926,6 +928,122 @@ warning IL2104: Assembly 'System.Configuration.ConfigurationManager' produced tr
 - ⚠️ Use Native AOT with caution - aggressive trimming may cause unexpected behaviors
 - ✅ Monitor database driver releases for AOT compatibility improvements
 - ✅ For dynamic scenarios, use standard JIT builds instead
+
+## ⚠️ Query Builder *(Beta)*
+
+> **This feature is in beta.** Always review and test generated SQL queries in a staging environment before deploying to production.
+
+`QueryBuilder<T>` provides a fluent, type-safe API for building parameterised SELECT, INSERT, UPDATE, and DELETE statements without writing raw SQL. Because queries are generated dynamically at runtime, it is **essential** to validate the generated output before relying on it in production.
+
+### Model Setup
+
+Decorate your model with `[JadeDbTable]` to specify the table name (optional — the builder pluralises the class name by default), and `[JadeDbColumn]` for any column-name differences:
+
+```csharp
+using JadeDbClient.Attributes;
+
+[JadeDbTable("products")]
+public class Product
+{
+    public int Id { get; set; }
+
+    [JadeDbColumn("product_name")]
+    public string Name { get; set; } = string.Empty;
+
+    public decimal Price { get; set; }
+
+    [JadeDbColumn("category_id")]
+    public int CategoryId { get; set; }
+}
+```
+
+### SELECT
+
+```csharp
+var qb = new QueryBuilder<Product>(_dbService);
+
+// Simple SELECT all columns
+var (sql, parameters) = qb.BuildSelect();
+// → SELECT Id, product_name, Price, category_id FROM products
+
+// Filter, order, page
+var (sql, parameters) = new QueryBuilder<Product>(_dbService)
+    .Where(p => p.Price > 10.0m && p.Name.Contains("Widget"))
+    .OrderBy(p => p.Name)
+    .ThenByDescending(p => p.Price)
+    .Skip(20)
+    .Take(10)
+    .BuildSelect();
+
+// Specific columns only (validated against an allow-list of safe identifier characters)
+var (sql, parameters) = new QueryBuilder<Product>(_dbService)
+    .Select("Id", "product_name")
+    .BuildSelect();
+```
+
+### INSERT
+
+```csharp
+var product = new Product { Name = "Gadget", Price = 29.99m, CategoryId = 3 };
+
+// Plain INSERT
+var (sql, parameters) = new QueryBuilder<Product>(_dbService)
+    .BuildInsert(product);
+
+// INSERT and return the new identity / serial value
+var (sql, parameters) = new QueryBuilder<Product>(_dbService)
+    .BuildInsert(product, returnIdentity: true);
+```
+
+### UPDATE
+
+```csharp
+var (sql, parameters) = new QueryBuilder<Product>(_dbService)
+    .Where(p => p.Id == 42)
+    .BuildUpdate(updatedProduct);
+```
+
+### DELETE
+
+```csharp
+var (sql, parameters) = new QueryBuilder<Product>(_dbService)
+    .Where(p => p.CategoryId == 5)
+    .BuildDelete();
+```
+
+### Supported WHERE operators
+
+| Expression | Generated SQL |
+|---|---|
+| `p.Price > 10` | `(Price > @p0)` |
+| `p.Name == "X"` | `(product_name = @p0)` |
+| `p.Name.Contains("X")` | `product_name LIKE @p0 ESCAPE '~'` |
+| `p.Name.StartsWith("X")` | `product_name LIKE @p0 ESCAPE '~'` |
+| `p.Name.EndsWith("X")` | `product_name LIKE @p0 ESCAPE '~'` |
+| `p.CategoryId.In(ids)` | `category_id IN (@p0, @p1, …)` |
+| `&&` / `\|\|` | `AND` / `OR` |
+| `!` | `NOT (…)` |
+
+### Security notes
+
+- **All values are parameterised** — user-supplied values never appear inline in the SQL string.
+- **LIKE wildcards are automatically escaped** — characters such as `%`, `_`, `~`, and (on SQL Server) `[` in string values are escaped before being passed as parameters, preventing unintended wildcard matches.
+- **Column names passed to `Select()` and the legacy `OrderBy(string)` are validated** — only safe SQL identifiers (alphanumeric, underscores, dots, and standard quoting styles) are accepted; any other input throws an `ArgumentException`.
+- **Empty `In()` lists** — passing an empty collection to `.In(values)` generates a safe always-false predicate (`1=0`) instead of invalid SQL syntax (`IN ()`).
+- **Prefer expression-based overloads** — use `OrderBy(p => p.CreatedAt)` rather than the deprecated `OrderBy("CreatedAt")` string overload wherever possible, as expressions resolve column names through the type system.
+
+### Beta limitations & recommendations
+
+> ⚠️ **Review every generated query before production use.**
+
+1. **Always inspect the generated SQL** — log or print `sql` in development to confirm the query is correct for your schema.
+2. **Test all code paths** — run your application against a staging database and verify INSERT, UPDATE, DELETE, and complex WHERE clauses produce the expected rows and row counts.
+3. **Pagination on SQL Server requires ORDER BY** — calling `Skip`/`Take` without at least one `OrderBy` throws `InvalidOperationException`.
+4. **UPDATE and DELETE require a WHERE clause** — omitting `.Where(…)` before `BuildUpdate` / `BuildDelete` throws `InvalidOperationException` to prevent accidental full-table modifications.
+5. **`Id` property exclusion** — `BuildInsert` and `BuildUpdate` currently skip any property named exactly `Id`. If your primary key has a different name, map it with `[JadeDbColumn]` or exclude it manually.
+6. **Complex expressions are not yet supported** — only simple member access, binary comparisons, string methods (`Contains`, `StartsWith`, `EndsWith`), and the `In` extension are translated. Unsupported expressions throw `NotSupportedException`.
+
+---
 
 ## 📚 Documentation
 - **[GitHub Repository](https://github.com/KaustavCodes/JadeDbClient-DotNet)** - Source code and issue tracker

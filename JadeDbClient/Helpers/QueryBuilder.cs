@@ -5,6 +5,7 @@ using System.Linq;
 using System.Linq.Expressions;
 using System.Reflection;
 using System.Text;
+using System.Text.RegularExpressions;
 using JadeDbClient.Interfaces;
 using JadeDbClient.Enums;
 using JadeDbClient.Helpers;
@@ -34,6 +35,8 @@ public class QueryBuilder<T> where T : class
     // ── Fluent methods ──
     public QueryBuilder<T> Select(params string[] columns)
     {
+        foreach (var col in columns)
+            ValidateSqlIdentifier(col);
         _selectColumns = columns;
         return this;
     }
@@ -105,6 +108,7 @@ public class QueryBuilder<T> where T : class
     public QueryBuilder<T> OrderBy(string orderBy)
     {
         Console.WriteLine("[WARNING] Using legacy string-based OrderBy – prefer expression version for safety");
+        ValidateSqlIdentifier(orderBy);
         // Simplistic parsing – assumes no DESC/ASC in string
         _orderings.Add((orderBy, false));
         return this;
@@ -270,7 +274,7 @@ public class QueryBuilder<T> where T : class
         }
     }
 
-    private string GetColumnFromExpression<TKey>(Expression<Func<T, TKey>> keySelector)
+    private static string GetColumnFromExpression<TKey>(Expression<Func<T, TKey>> keySelector)
     {
         if (keySelector.Body is not MemberExpression memberExpr ||
             memberExpr.Member is not PropertyInfo propInfo)
@@ -281,6 +285,30 @@ public class QueryBuilder<T> where T : class
         }
 
         return ReflectionHelper.GetColumnName(propInfo);
+    }
+
+    /// <summary>
+    /// Safe SQL identifier regex: allows alphanumeric/underscore names, dot-qualified names
+    /// (schema.table.column), and names wrapped in standard quoting styles
+    /// ([name], `name`, "name"). Also allows * for SELECT *.
+    /// Rejects input containing SQL meta-characters such as semicolons, dashes, or slashes
+    /// that could be used for injection.
+    /// </summary>
+    private static readonly Regex _safeIdentifierRegex = new(
+        @"^\*$|^(\[[\w\s]+\]|`[\w\s]+`|""[\w\s]+""|[\w]+)(\.\[[\w\s]+\]|\.`[\w\s]+`|\.""[\w\s]+""|\.[\w]+)*$",
+        RegexOptions.Compiled | RegexOptions.CultureInvariant);
+
+    private static void ValidateSqlIdentifier(string name)
+    {
+        if (string.IsNullOrWhiteSpace(name))
+            throw new ArgumentException("Column name must not be null or empty.", nameof(name));
+
+        if (!_safeIdentifierRegex.IsMatch(name))
+            throw new ArgumentException(
+                $"Column name '{name}' contains invalid characters. " +
+                "Only alphanumeric characters, underscores, dots, and standard quoting ([name], `name`, \"name\") are allowed. " +
+                "Use expression-based methods instead of raw strings wherever possible.",
+                nameof(name));
     }
 
     private static DbType InferDbType(Type type)
