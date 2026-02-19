@@ -18,11 +18,13 @@ internal class ExpressionToSqlVisitor<T> : ExpressionVisitor
     private int _paramCounter = 0;
     private readonly IDatabaseService _dbService;
     private readonly DatabaseDialect _dialect;
+    private readonly string? _tablePrefix;
 
-    public ExpressionToSqlVisitor(IDatabaseService dbService)
+    public ExpressionToSqlVisitor(IDatabaseService dbService, string? tablePrefix = null)
     {
         _dbService = dbService ?? throw new ArgumentNullException(nameof(dbService));
         _dialect = dbService.Dialect;
+        _tablePrefix = tablePrefix;
     }
 
     public (string WhereClause, IReadOnlyList<IDbDataParameter> Parameters) Translate(Expression<Func<T, bool>>? predicate)
@@ -81,7 +83,7 @@ internal class ExpressionToSqlVisitor<T> : ExpressionVisitor
             // Property access: x => x.Status
             var propInfo = (PropertyInfo)node.Member;
             var columnName = ReflectionHelper.GetColumnName(propInfo);
-            _sql.Append(columnName);
+            _sql.Append(_tablePrefix != null ? $"{_tablePrefix}.{columnName}" : columnName);
             return node;
         }
 
@@ -147,11 +149,19 @@ internal class ExpressionToSqlVisitor<T> : ExpressionVisitor
         // Handle custom In extension method
         if (node.Method.Name == nameof(QueryExtensions.In) && node.Method.IsStatic)
         {
+            var valuesExpr = node.Arguments[1];
+            var rawValues = (IEnumerable)Expression.Lambda(valuesExpr).Compile().DynamicInvoke()!;
+            var values = rawValues.Cast<object?>().ToList();
+
+            if (values.Count == 0)
+            {
+                // Empty IN() is a SQL syntax error; use always-false predicate instead
+                _sql.Append("1=0");
+                return node;
+            }
+
             Visit(node.Arguments[0]); // the property
             _sql.Append(" IN (");
-
-            var valuesExpr = node.Arguments[1];
-            var values = (IEnumerable)Expression.Lambda(valuesExpr).Compile().DynamicInvoke()!;
 
             var paramNames = new List<string>();
             foreach (var val in values)
@@ -189,7 +199,23 @@ internal class ExpressionToSqlVisitor<T> : ExpressionVisitor
             return;
         }
 
-        AddParameter(prefix + value + suffix, typeof(string));
+        // Escape LIKE wildcard characters in the user-supplied value so that
+        // special characters are treated as literals and not as pattern wildcards.
+        // '~' is used as the escape character (not special in any supported dialect).
+        var escapedValue = value
+            .Replace("~", "~~")   // escape the escape character itself first
+            .Replace("%", "~%")
+            .Replace("_", "~_");
+
+        // SQL Server also treats '[' as a wildcard character in LIKE patterns
+        if (_dialect == DatabaseDialect.MsSql)
+            escapedValue = escapedValue.Replace("[", "~[");
+
+        AddParameter(prefix + escapedValue + suffix, typeof(string));
+
+        // Append the ESCAPE clause only when characters were actually escaped
+        if (escapedValue != value)
+            _sql.Append(" ESCAPE '~'");
     }
 
     private static object? GetValueFromExpression(Expression expr)

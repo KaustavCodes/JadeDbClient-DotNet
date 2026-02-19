@@ -16,8 +16,10 @@
 - **Transaction Support**: Full support for database transactions with commit and rollback capabilities across all database types.
 - **🚀 Source Generator for AOT**: Automatically generates optimized mappers at compile-time with the `[JadeDbObject]` attribute - no manual registration needed!
 - **Custom Column Mapping**: Use `[JadeDbColumn]` attribute to map database column names (e.g., snake_case) to C# property names (e.g., PascalCase).
+- **Custom Table Mapping**: Use `[JadeDbTable]` attribute to map a C# class to a custom database table name.
 - **Native AOT Compatible**: Designed for .NET Native AOT applications with compile-time code generation (Note: Underlying database drivers may still have AOT limitations).
 - **Consistent API**: Provides a unified API to eliminate the headaches of switching databases.
+- **⚠️ Query Builder *(Beta)***: Fluent, type-safe SELECT / INSERT / UPDATE / DELETE query construction — see [beta notice](#-query-builder-beta) below before using in production.
 
 ## Installation
 
@@ -926,6 +928,198 @@ warning IL2104: Assembly 'System.Configuration.ConfigurationManager' produced tr
 - ⚠️ Use Native AOT with caution - aggressive trimming may cause unexpected behaviors
 - ✅ Monitor database driver releases for AOT compatibility improvements
 - ✅ For dynamic scenarios, use standard JIT builds instead
+
+## ⚠️ Query Builder *(Beta)*
+
+> **This feature is in beta.** Always review and test generated SQL queries in a staging environment before deploying to production.
+
+`QueryBuilder<T>` provides a fluent, type-safe API for building parameterised SELECT, INSERT, UPDATE, and DELETE statements without writing raw SQL. Because queries are generated dynamically at runtime, it is **essential** to validate the generated output before relying on it in production.
+
+### Model Setup
+
+Decorate your model with `[JadeDbTable]` to specify the table name (optional — the builder pluralises the class name by default), and `[JadeDbColumn]` for any column-name differences:
+
+```csharp
+using JadeDbClient.Attributes;
+
+[JadeDbTable("products")]
+public class Product
+{
+    public int Id { get; set; }
+
+    [JadeDbColumn("product_name")]
+    public string Name { get; set; } = string.Empty;
+
+    public decimal Price { get; set; }
+
+    [JadeDbColumn("category_id")]
+    public int CategoryId { get; set; }
+}
+```
+
+### SELECT
+
+```csharp
+var qb = new QueryBuilder<Product>(_dbService);
+
+// Simple SELECT – all columns
+var (sql, parameters) = qb.BuildSelect();
+// → SELECT Id, product_name, Price, category_id FROM products
+
+// Filter, order, page
+var (sql, parameters) = new QueryBuilder<Product>(_dbService)
+    .Where(p => p.Price > 10.0m && p.Name.Contains("Widget"))
+    .OrderBy(p => p.Name)
+    .ThenByDescending(p => p.Price)
+    .Skip(20)
+    .Take(10)
+    .BuildSelect();
+
+// Type-safe column selection – single property
+var (sql, parameters) = new QueryBuilder<Product>(_dbService)
+    .Select(p => p.Name)
+    .BuildSelect();
+// → SELECT product_name FROM products
+
+// Type-safe column selection – anonymous type projection
+var (sql, parameters) = new QueryBuilder<Product>(_dbService)
+    .Select(p => new { p.Name, p.Price })
+    .BuildSelect();
+// → SELECT product_name, Price FROM products
+
+// Raw string columns (validated; caller is responsible for table-qualification with joins)
+var (sql, parameters) = new QueryBuilder<Product>(_dbService)
+    .Select("Id", "product_name")
+    .BuildSelect();
+```
+
+### JOINs
+
+Use `Join<TJoin>`, `LeftJoin<TJoin>`, `RightJoin<TJoin>`, or `FullJoin<TJoin>` to combine tables. The ON condition is expressed as a two-parameter lambda — both property names and column attributes are resolved automatically.
+
+When any join is added, all unqualified column names in SELECT, WHERE, and ORDER BY are automatically prefixed with the main table name to prevent ambiguity.
+
+```csharp
+[JadeDbTable("categories")]
+public class Category
+{
+    public int Id { get; set; }
+
+    [JadeDbColumn("category_name")]
+    public string Name { get; set; } = string.Empty;
+}
+
+// INNER JOIN (default)
+var (sql, parameters) = new QueryBuilder<Product>(_dbService)
+    .Join<Category>((product, category) => product.CategoryId == category.Id)
+    .Select(p => new { p.Name, p.Price })
+    .Where(p => p.Price > 10m)
+    .OrderBy(p => p.Name)
+    .BuildSelect();
+// → SELECT products.product_name, products.Price
+//   FROM products
+//   INNER JOIN categories ON (products.category_id = categories.Id)
+//   WHERE (products.Price > @p0)
+//   ORDER BY products.product_name ASC
+
+// LEFT JOIN
+var (sql, parameters) = new QueryBuilder<Product>(_dbService)
+    .LeftJoin<Category>((p, c) => p.CategoryId == c.Id)
+    .BuildSelect();
+
+// Multiple joins
+var (sql, parameters) = new QueryBuilder<Product>(_dbService)
+    .Join<Category>((p, c) => p.CategoryId == c.Id)
+    .LeftJoin<Order>((p, o) => p.Id == o.Id)
+    .BuildSelect();
+
+// Compound ON condition
+var (sql, parameters) = new QueryBuilder<Product>(_dbService)
+    .Join<Category>((p, c) => p.CategoryId == c.Id && p.Price > 0m)
+    .BuildSelect();
+
+// Selecting columns from both tables (use raw-string Select when you need joined columns)
+var (sql, parameters) = new QueryBuilder<Product>(_dbService)
+    .Join<Category>((p, c) => p.CategoryId == c.Id)
+    .Select("products.product_name", "categories.category_name")
+    .BuildSelect();
+```
+
+### INSERT
+
+```csharp
+var product = new Product { Name = "Gadget", Price = 29.99m, CategoryId = 3 };
+
+// Plain INSERT
+var (sql, parameters) = new QueryBuilder<Product>(_dbService)
+    .BuildInsert(product);
+
+// INSERT and return the new identity / serial value
+var (sql, parameters) = new QueryBuilder<Product>(_dbService)
+    .BuildInsert(product, returnIdentity: true);
+```
+
+### UPDATE
+
+```csharp
+var (sql, parameters) = new QueryBuilder<Product>(_dbService)
+    .Where(p => p.Id == 42)
+    .BuildUpdate(updatedProduct);
+```
+
+### DELETE
+
+```csharp
+var (sql, parameters) = new QueryBuilder<Product>(_dbService)
+    .Where(p => p.CategoryId == 5)
+    .BuildDelete();
+```
+
+### Supported WHERE operators
+
+| Expression | Generated SQL |
+|---|---|
+| `p.Price > 10` | `(Price > @p0)` |
+| `p.Name == "X"` | `(product_name = @p0)` |
+| `p.Name.Contains("X")` | `product_name LIKE @p0 ESCAPE '~'` |
+| `p.Name.StartsWith("X")` | `product_name LIKE @p0 ESCAPE '~'` |
+| `p.Name.EndsWith("X")` | `product_name LIKE @p0 ESCAPE '~'` |
+| `p.CategoryId.In(ids)` | `category_id IN (@p0, @p1, …)` |
+| `&&` / `\|\|` | `AND` / `OR` |
+| `!` | `NOT (…)` |
+
+### JOIN reference
+
+| Method | SQL keyword |
+|---|---|
+| `.Join<TJoin>(on)` | `INNER JOIN` |
+| `.LeftJoin<TJoin>(on)` | `LEFT JOIN` |
+| `.RightJoin<TJoin>(on)` | `RIGHT JOIN` |
+| `.FullJoin<TJoin>(on)` | `FULL JOIN` |
+
+> **Column qualification with joins**: When one or more joins are added, any unqualified column name in SELECT, WHERE, and ORDER BY that was derived from an expression (or from the default *all-columns* selection) is automatically prefixed with the main table name to prevent ambiguity. If you use the raw-string `Select("col1", "col2")` overload, you are responsible for qualifying any column names that could be ambiguous.
+
+### Security notes
+
+- **All values are parameterised** — user-supplied values never appear inline in the SQL string.
+- **LIKE wildcards are automatically escaped** — characters such as `%`, `_`, `~`, and (on SQL Server) `[` in string values are escaped before being passed as parameters, preventing unintended wildcard matches.
+- **Column names passed to `Select(string[])` and the legacy `OrderBy(string)` are validated** — only safe SQL identifiers (alphanumeric, underscores, dots, and standard quoting styles) are accepted; any other input throws an `ArgumentException`. Prefer expression overloads.
+- **Empty `In()` lists** — passing an empty collection to `.In(values)` generates a safe always-false predicate (`1=0`) instead of invalid SQL syntax (`IN ()`).
+- **Prefer expression-based overloads** — `Select(p => new { p.Name })`, `OrderBy(p => p.CreatedAt)`, and `Join<TJoin>((p, j) => …)` all resolve column names through the type system and respect `[JadeDbColumn]` attributes.
+
+### Beta limitations & recommendations
+
+> ⚠️ **Review every generated query before production use.**
+
+1. **Always inspect the generated SQL** — log or print `sql` in development to confirm the query is correct for your schema.
+2. **Test all code paths** — run your application against a staging database and verify INSERT, UPDATE, DELETE, JOIN, and complex WHERE clauses produce the expected rows and row counts.
+3. **Pagination on SQL Server requires ORDER BY** — calling `Skip`/`Take` without at least one `OrderBy` throws `InvalidOperationException`.
+4. **UPDATE and DELETE require a WHERE clause** — omitting `.Where(…)` before `BuildUpdate` / `BuildDelete` throws `InvalidOperationException` to prevent accidental full-table modifications.
+5. **`Id` property exclusion** — `BuildInsert` and `BuildUpdate` currently skip any property named exactly `Id`. If your primary key has a different name, map it with `[JadeDbColumn]` or exclude it manually.
+6. **JOIN result mapping** — `BuildSelect()` only returns the SQL and its parameters; mapping rows from a JOIN result set (which spans multiple types) must be done manually or via `ExecuteQueryAsync<T>` with a custom mapper.
+7. **Complex expressions are not yet supported** — only simple member access, binary comparisons, string methods (`Contains`, `StartsWith`, `EndsWith`), and the `In` extension are translated. Unsupported expressions throw `NotSupportedException`.
+
+---
 
 ## 📚 Documentation
 - **[GitHub Repository](https://github.com/KaustavCodes/JadeDbClient-DotNet)** - Source code and issue tracker
