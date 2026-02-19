@@ -6,6 +6,7 @@ using Microsoft.Data.SqlClient;
 using System.Diagnostics.CodeAnalysis;
 using JadeDbClient.Helpers;
 using System.Diagnostics;
+using JadeDbClient.Enums;
 
 namespace JadeDbClient;
 
@@ -45,6 +46,8 @@ public class MsSqlDbService : IDatabaseService
             Console.WriteLine($"[JadeDbClient] [MSSQL] Execution Time: {elapsedMilliseconds} ms");
         }
     }
+
+    public DatabaseDialect Dialect => DatabaseDialect.MsSql;
 
     /// <summary>
     /// Open a connection to the database

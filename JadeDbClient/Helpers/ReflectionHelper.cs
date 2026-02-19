@@ -30,4 +30,46 @@ internal static class ReflectionHelper
     {
         return properties.Select(GetColumnName).ToArray();
     }
+
+    /// <summary>
+    /// Gets the database table name for a type, respecting the JadeDbTable attribute if present.
+    /// Falls back to a simple pluralized class name convention.
+    /// </summary>
+    internal static string GetTableName(Type type)
+    {
+        var tableAttribute = type.GetCustomAttribute<JadeDbTableAttribute>();
+        if (tableAttribute != null)
+        {
+            return tableAttribute.TableName;
+        }
+
+        // Simple pluralization convention (can be improved later with more rules or a library)
+        var name = type.Name;
+        if (name.EndsWith("y", StringComparison.OrdinalIgnoreCase) && name.Length > 1 &&
+            !"aeiouAEIOU".Contains(name[^2]))
+        {
+            return name[..^1] + "ies";
+        }
+
+        if (name.EndsWith("s", StringComparison.OrdinalIgnoreCase) ||
+            name.EndsWith("x", StringComparison.OrdinalIgnoreCase) ||
+            name.EndsWith("ch", StringComparison.OrdinalIgnoreCase) ||
+            name.EndsWith("sh", StringComparison.OrdinalIgnoreCase))
+        {
+            return name + "es";
+        }
+
+        return name + "s";
+    }
+
+    /// <summary>
+    /// Gets all mappable properties for a type (public instance properties that can be read and written).
+    /// This is used by QueryBuilder and other reflection-based features.
+    /// </summary>
+    internal static PropertyInfo[] GetMappableProperties(Type type)
+    {
+        return type.GetProperties(BindingFlags.Public | BindingFlags.Instance)
+                   .Where(p => p.CanRead && p.CanWrite)
+                   .ToArray();
+    }
 }
