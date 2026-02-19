@@ -539,7 +539,7 @@ public class MySqlDbService : IDatabaseService
         var properties = typeof(T).GetProperties().Where(p => p.CanRead).ToArray();
         if (properties.Length == 0) throw new InvalidOperationException($"Type {typeof(T).Name} has no readable properties");
 
-        var columnNames = properties.Select(p => $"`{p.Name}`").ToArray();
+        var columnNames = ReflectionHelper.GetColumnNames(properties).Select(c => $"`{c}`").ToArray();
 
         using var connection = new MySqlConnection(_connectionString);
         await connection.OpenAsync();
@@ -706,7 +706,7 @@ public class MySqlDbService : IDatabaseService
         var properties = typeof(T).GetProperties().Where(p => p.CanRead).ToArray();
         if (properties.Length == 0) throw new InvalidOperationException($"Type {typeof(T).Name} has no readable properties");
 
-        var columnNames = properties.Select(p => $"`{p.Name}`").ToArray();
+        var columnNames = ReflectionHelper.GetColumnNames(properties).Select(c => $"`{c}`").ToArray();
 
         using var connection = new MySqlConnection(_connectionString);
         await connection.OpenAsync();

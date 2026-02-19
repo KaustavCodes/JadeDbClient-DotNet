@@ -789,7 +789,8 @@ public class MsSqlDbService : IDatabaseService
 
         foreach (var property in properties)
         {
-            bulkCopy.ColumnMappings.Add(property.Name, property.Name);
+            var columnName = ReflectionHelper.GetColumnName(property);
+            bulkCopy.ColumnMappings.Add(property.Name, columnName);
         }
 
         await bulkCopy.WriteToServerAsync(dataTable);
