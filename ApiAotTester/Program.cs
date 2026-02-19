@@ -4,6 +4,7 @@ using JadeDbClient.Initialize;
 using JadeDbClient.Interfaces;
 using System.Data;
 using JadeDbClient.Attributes;
+using JadeDbClient.Helpers;
 
 var builder = WebApplication.CreateSlimBuilder(args);
 
@@ -42,6 +43,36 @@ if (app.Environment.IsDevelopment())
 {
     app.MapOpenApi();
 }
+
+// ========= NEW Query Builder =========
+
+
+app.MapGet("/test-builder", async (IDatabaseService dbConfig) =>
+{
+    var queryBuilder = new QueryBuilder<DataModel>(dbConfig)
+        .Where(d => d.Id > 10 && d.FullName.StartsWith("j"))
+        .OrderBy(t => t.FullName)
+        .ThenByDescending(t => t.Id)
+        .Skip(5)
+        .Take(10).BuildSelect();
+
+
+
+    // For testing, we'll just return the generated SQL and parameters instead of executing it
+    return Results.Ok(new QueryBuilderResponse()
+    {
+        GeneratedSql = queryBuilder.Sql,
+        Parameters = string.Join(", ", queryBuilder.Parameters.Select(p => $"{p.ParameterName}: {p.Value} ({p.DbType})"))
+    });
+
+    // IEnumerable<DataModel> results = await dbConfig.ExecuteQueryAsync<DataModel>(queryBuilder.Sql, queryBuilder.Parameters);
+
+    // return results;
+
+});
+
+
+// ========== TEST ENDPOINTS ==========
 
 app.MapGet("/test-postgres", async (IDatabaseService dbConfig) =>
 {
@@ -516,6 +547,7 @@ static DataTable ProductsToDataTable(List<Product> products)
 
 // DataModel has a pre-compiled mapper registered
 [JadeDbObject]
+[JadeDbTable("tbl_test")]
 public partial class DataModel
 {
     [JadeDbColumn("id")]
@@ -599,6 +631,12 @@ public class PerformanceModeResult
     public double recordsPerSecond { get; set; }
 }
 
+public class QueryBuilderResponse
+{
+    public string GeneratedSql { get; set; } = "";
+    public string? Parameters { get; set; } = "";
+}
+
 [JsonSerializable(typeof(IEnumerable<DataModel>))]
 [JsonSerializable(typeof(List<DataModel>))]
 [JsonSerializable(typeof(DataModel))]
@@ -616,6 +654,7 @@ public class PerformanceModeResult
 [JsonSerializable(typeof(BulkInsertPerformanceResponse))]
 [JsonSerializable(typeof(PerformanceModeResult))]
 [JsonSerializable(typeof(List<PerformanceModeResult>))]
+[JsonSerializable(typeof(QueryBuilderResponse))]
 internal partial class AppJsonSerializerContext : JsonSerializerContext
 {
 

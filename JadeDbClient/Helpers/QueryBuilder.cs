@@ -19,7 +19,7 @@ public class QueryBuilder<T> where T : class
 
     private string[]? _selectColumns;
     private Expression<Func<T, bool>>? _whereExpression;
-    private string? _orderBy;
+    private readonly List<(string Column, bool IsDescending)> _orderings = new();
     private int? _limit;
     private int? _skip;
     private readonly List<IDbDataParameter> _parameters = new();
@@ -31,7 +31,7 @@ public class QueryBuilder<T> where T : class
         _tableName = ReflectionHelper.GetTableName(typeof(T));
     }
 
-    // Fluent methods (same as before)
+    // ── Fluent methods ──
     public QueryBuilder<T> Select(params string[] columns)
     {
         _selectColumns = columns;
@@ -44,9 +44,69 @@ public class QueryBuilder<T> where T : class
         return this;
     }
 
+    // Primary ordering (must be called first)
+    public QueryBuilder<T> OrderBy<TKey>(Expression<Func<T, TKey>> keySelector)
+    {
+        if (_orderings.Count > 0)
+        {
+            throw new InvalidOperationException(
+                "OrderBy / OrderByDescending must be called before any ThenBy / ThenByDescending. " +
+                "Use ThenBy for additional sort criteria.");
+        }
+
+        var column = GetColumnFromExpression(keySelector);
+        _orderings.Add((column, false));
+        return this;
+    }
+
+    public QueryBuilder<T> OrderByDescending<TKey>(Expression<Func<T, TKey>> keySelector)
+    {
+        if (_orderings.Count > 0)
+        {
+            throw new InvalidOperationException(
+                "OrderBy / OrderByDescending must be called before any ThenBy / ThenByDescending. " +
+                "Use ThenByDescending for additional sort criteria.");
+        }
+
+        var column = GetColumnFromExpression(keySelector);
+        _orderings.Add((column, true));
+        return this;
+    }
+
+    // Secondary and subsequent ordering
+    public QueryBuilder<T> ThenBy<TKey>(Expression<Func<T, TKey>> keySelector)
+    {
+        if (_orderings.Count == 0)
+        {
+            throw new InvalidOperationException(
+                "ThenBy / ThenByDescending can only be used after an initial OrderBy or OrderByDescending.");
+        }
+
+        var column = GetColumnFromExpression(keySelector);
+        _orderings.Add((column, false));
+        return this;
+    }
+
+    public QueryBuilder<T> ThenByDescending<TKey>(Expression<Func<T, TKey>> keySelector)
+    {
+        if (_orderings.Count == 0)
+        {
+            throw new InvalidOperationException(
+                "ThenBy / ThenByDescending can only be used after an initial OrderBy or OrderByDescending.");
+        }
+
+        var column = GetColumnFromExpression(keySelector);
+        _orderings.Add((column, true));
+        return this;
+    }
+
+    // Optional legacy string-based OrderBy (with warning)
+    [Obsolete("Prefer expression-based OrderBy/ThenBy for type safety and column attribute support.")]
     public QueryBuilder<T> OrderBy(string orderBy)
     {
-        _orderBy = orderBy;
+        Console.WriteLine("[WARNING] Using legacy string-based OrderBy – prefer expression version for safety");
+        // Simplistic parsing – assumes no DESC/ASC in string
+        _orderings.Add((orderBy, false));
         return this;
     }
 
@@ -62,7 +122,7 @@ public class QueryBuilder<T> where T : class
         return this;
     }
 
-    // Build SELECT
+    // ── Build SELECT ──
     public (string Sql, IEnumerable<IDbDataParameter> Parameters) BuildSelect()
     {
         var sb = new StringBuilder("SELECT ");
@@ -77,19 +137,25 @@ public class QueryBuilder<T> where T : class
 
         AppendWhere(sb);
 
-        if (!string.IsNullOrWhiteSpace(_orderBy))
-            sb.Append(" ORDER BY ").Append(_orderBy);
+        // Append ORDER BY (supports multiple levels)
+        if (_orderings.Count > 0)
+        {
+            sb.Append(" ORDER BY ");
+            var orderParts = _orderings.Select(o =>
+                $"{o.Column}{(o.IsDescending ? " DESC" : " ASC")}");
+            sb.Append(string.Join(", ", orderParts));
+        }
 
         AppendPaging(sb);
 
         return (sb.ToString(), _parameters);
     }
 
-    // Build INSERT (example - expand as needed)
+    // ── Build INSERT ── (unchanged)
     public (string Sql, IEnumerable<IDbDataParameter> Parameters) BuildInsert(T entity, bool returnIdentity = false)
     {
         var props = ReflectionHelper.GetMappableProperties(typeof(T))
-            .Where(p => p.Name != "Id" && p.CanWrite) // skip auto-id by convention
+            .Where(p => p.Name != "Id" && p.CanWrite)
             .ToArray();
 
         var columns = ReflectionHelper.GetColumnNames(props);
@@ -120,7 +186,7 @@ public class QueryBuilder<T> where T : class
         return (sql.ToString(), _parameters);
     }
 
-    // Build UPDATE
+    // ── Build UPDATE ── (unchanged)
     public (string Sql, IEnumerable<IDbDataParameter> Parameters) BuildUpdate(T entity)
     {
         if (_whereExpression == null)
@@ -142,13 +208,12 @@ public class QueryBuilder<T> where T : class
         }
 
         var sql = new StringBuilder($"UPDATE {_tableName} SET {string.Join(", ", setClauses)}");
-
         AppendWhere(sql);
 
         return (sql.ToString(), _parameters);
     }
 
-    // Build DELETE
+    // ── Build DELETE ── (unchanged)
     public (string Sql, IEnumerable<IDbDataParameter> Parameters) BuildDelete()
     {
         if (_whereExpression == null)
@@ -181,8 +246,8 @@ public class QueryBuilder<T> where T : class
         switch (_dialect)
         {
             case DatabaseDialect.MsSql:
-                if (string.IsNullOrWhiteSpace(_orderBy))
-                    throw new InvalidOperationException("ORDER BY is required when using Skip/Take with SQL Server.");
+                if (_orderings.Count == 0)
+                    throw new InvalidOperationException("At least one ORDER BY clause is required when using Skip/Take with SQL Server.");
 
                 if (_skip.HasValue)
                     sb.Append($" OFFSET {_skip.Value} ROWS");
@@ -203,6 +268,19 @@ public class QueryBuilder<T> where T : class
             default:
                 throw new NotSupportedException($"Paging not implemented for dialect {_dialect}");
         }
+    }
+
+    private string GetColumnFromExpression<TKey>(Expression<Func<T, TKey>> keySelector)
+    {
+        if (keySelector.Body is not MemberExpression memberExpr ||
+            memberExpr.Member is not PropertyInfo propInfo)
+        {
+            throw new ArgumentException(
+                "OrderBy/ThenBy expression must be a simple property access " +
+                "(e.g. o => o.CreatedAt). Complex expressions are not supported yet.");
+        }
+
+        return ReflectionHelper.GetColumnName(propInfo);
     }
 
     private static DbType InferDbType(Type type)
