@@ -19,11 +19,17 @@ public class QueryBuilder<T> where T : class
     private readonly string _tableName;
 
     private string[]? _selectColumns;
+    // True when _selectColumns came from an expression or from the default (all cols);
+    // they will be auto-qualified with the main table name when joins are present.
+    // False when they came from the raw-string Select() overload; the caller is
+    // responsible for providing correctly qualified identifiers.
+    private bool _selectColumnsNeedQualification = true;
     private Expression<Func<T, bool>>? _whereExpression;
     private readonly List<(string Column, bool IsDescending)> _orderings = new();
     private int? _limit;
     private int? _skip;
     private readonly List<IDbDataParameter> _parameters = new();
+    private readonly List<(string JoinSql, IReadOnlyList<IDbDataParameter> Parameters)> _joins = new();
 
     public QueryBuilder(IDatabaseService dbService)
     {
@@ -33,11 +39,31 @@ public class QueryBuilder<T> where T : class
     }
 
     // ── Fluent methods ──
+
+    /// <summary>
+    /// Selects specific columns by name. Column names are validated to contain only safe
+    /// SQL identifier characters. When joins are present the caller is responsible for
+    /// table-qualifying any ambiguous column names.
+    /// </summary>
     public QueryBuilder<T> Select(params string[] columns)
     {
         foreach (var col in columns)
             ValidateSqlIdentifier(col);
         _selectColumns = columns;
+        _selectColumnsNeedQualification = false;
+        return this;
+    }
+
+    /// <summary>
+    /// Selects specific columns using a type-safe LINQ-style expression.
+    /// Supports single property access (<c>p => p.Name</c>) and anonymous-type
+    /// projections (<c>p => new { p.Name, p.Price }</c>).
+    /// Column names are resolved via <see cref="JadeDbColumnAttribute"/> when present.
+    /// </summary>
+    public QueryBuilder<T> Select<TResult>(Expression<Func<T, TResult>> selector)
+    {
+        _selectColumns = ExtractColumnsFromSelector(selector);
+        _selectColumnsNeedQualification = true;
         return this;
     }
 
@@ -126,6 +152,62 @@ public class QueryBuilder<T> where T : class
         return this;
     }
 
+    // ── JOIN methods ─────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// Adds a JOIN clause to the query.
+    /// </summary>
+    /// <typeparam name="TJoin">The type mapped to the table being joined.</typeparam>
+    /// <param name="on">
+    /// An expression specifying the ON condition, e.g.
+    /// <c>(product, category) => product.CategoryId == category.Id</c>.
+    /// Both parameter names must be distinct.
+    /// </param>
+    /// <param name="joinType">The type of join (default: <see cref="JoinType.Inner"/>).</param>
+    public QueryBuilder<T> Join<TJoin>(
+        Expression<Func<T, TJoin, bool>> on,
+        JoinType joinType = JoinType.Inner) where TJoin : class
+    {
+        if (on == null) throw new ArgumentNullException(nameof(on));
+
+        var joinTableName = ReflectionHelper.GetTableName(typeof(TJoin));
+        var leftParam = on.Parameters[0];
+        var rightParam = on.Parameters[1];
+
+        var visitor = new JoinExpressionVisitor(
+            _dbService,
+            leftAlias: _tableName,
+            rightAlias: joinTableName,
+            leftParamName: leftParam.Name!,
+            rightParamName: rightParam.Name!);
+
+        var (onSql, onParams) = visitor.Translate(on);
+
+        var joinKeyword = joinType switch
+        {
+            JoinType.Inner => "INNER JOIN",
+            JoinType.Left  => "LEFT JOIN",
+            JoinType.Right => "RIGHT JOIN",
+            JoinType.Full  => "FULL JOIN",
+            _ => throw new ArgumentOutOfRangeException(nameof(joinType))
+        };
+
+        _joins.Add(($"{joinKeyword} {joinTableName} ON {onSql}", onParams));
+        return this;
+    }
+
+    /// <summary>Shorthand for <see cref="Join{TJoin}"/> with <see cref="JoinType.Left"/>.</summary>
+    public QueryBuilder<T> LeftJoin<TJoin>(Expression<Func<T, TJoin, bool>> on) where TJoin : class
+        => Join(on, JoinType.Left);
+
+    /// <summary>Shorthand for <see cref="Join{TJoin}"/> with <see cref="JoinType.Right"/>.</summary>
+    public QueryBuilder<T> RightJoin<TJoin>(Expression<Func<T, TJoin, bool>> on) where TJoin : class
+        => Join(on, JoinType.Right);
+
+    /// <summary>Shorthand for <see cref="Join{TJoin}"/> with <see cref="JoinType.Full"/>.</summary>
+    public QueryBuilder<T> FullJoin<TJoin>(Expression<Func<T, TJoin, bool>> on) where TJoin : class
+        => Join(on, JoinType.Full);
+
     // ── Build SELECT ──
     public (string Sql, IEnumerable<IDbDataParameter> Parameters) BuildSelect()
     {
@@ -136,8 +218,17 @@ public class QueryBuilder<T> where T : class
             ? _selectColumns
             : ReflectionHelper.GetColumnNames(props);
 
-        sb.Append(string.Join(", ", columns));
+        // When joins are present, qualify unqualified column names with the main table
+        // name to prevent column-name ambiguity across joined tables.
+        sb.Append(string.Join(", ", columns.Select(QualifyColumn)));
         sb.Append(" FROM ").Append(_tableName);
+
+        // Append JOIN clauses and collect their parameters
+        foreach (var (joinSql, joinParams) in _joins)
+        {
+            sb.Append(' ').Append(joinSql);
+            _parameters.AddRange(joinParams);
+        }
 
         AppendWhere(sb);
 
@@ -146,7 +237,7 @@ public class QueryBuilder<T> where T : class
         {
             sb.Append(" ORDER BY ");
             var orderParts = _orderings.Select(o =>
-                $"{o.Column}{(o.IsDescending ? " DESC" : " ASC")}");
+                $"{QualifyColumn(o.Column)}{(o.IsDescending ? " DESC" : " ASC")}");
             sb.Append(string.Join(", ", orderParts));
         }
 
@@ -233,7 +324,10 @@ public class QueryBuilder<T> where T : class
     {
         if (_whereExpression == null) return;
 
-        var visitor = new ExpressionToSqlVisitor<T>(_dbService);
+        // When joins are present, qualify WHERE column references with the main table
+        // name to avoid ambiguity with same-named columns in joined tables.
+        var tablePrefix = _joins.Count > 0 ? _tableName : null;
+        var visitor = new ExpressionToSqlVisitor<T>(_dbService, tablePrefix);
         var (whereClause, whereParams) = visitor.Translate(_whereExpression);
 
         if (!string.IsNullOrWhiteSpace(whereClause))
@@ -288,14 +382,81 @@ public class QueryBuilder<T> where T : class
     }
 
     /// <summary>
+    /// Qualifies <paramref name="column"/> with the main table name when joins are present
+    /// and the column is not already table-qualified (i.e. does not contain a dot) and is
+    /// not the wildcard <c>*</c>.
+    /// Columns that came from the raw-string <see cref="Select(string[])"/> overload are
+    /// left as-is (<see cref="_selectColumnsNeedQualification"/> is false for those).
+    /// </summary>
+    private string QualifyColumn(string column)
+    {
+        if (_joins.Count == 0) return column;
+        if (column == "*" || column.Contains('.')) return column;
+        if (!_selectColumnsNeedQualification) return column;
+        return $"{_tableName}.{column}";
+    }
+
+    /// <summary>
+    /// Extracts database column names from a LINQ-style selector expression.
+    /// Supports:
+    /// <list type="bullet">
+    ///   <item><c>p => p.Name</c> — single property</item>
+    ///   <item><c>p => new { p.Name, p.Price }</c> — anonymous-type projection</item>
+    /// </list>
+    /// Column names are resolved via <see cref="JadeDbColumnAttribute"/> when present.
+    /// </summary>
+    private static string[] ExtractColumnsFromSelector<TResult>(Expression<Func<T, TResult>> selector)
+    {
+        var body = selector.Body;
+
+        // Anonymous type projection: p => new { p.Name, p.Price }
+        if (body is NewExpression newExpr)
+        {
+            var cols = new List<string>();
+            foreach (var arg in newExpr.Arguments)
+            {
+                var memberExpr = arg as MemberExpression
+                    ?? (arg as UnaryExpression)?.Operand as MemberExpression;
+
+                if (memberExpr?.Expression is ParameterExpression && memberExpr.Member is PropertyInfo prop)
+                {
+                    cols.Add(ReflectionHelper.GetColumnName(prop));
+                }
+                else
+                {
+                    throw new ArgumentException(
+                        "Each member in the anonymous type projection must be a simple property " +
+                        "access (e.g., p => new { p.Name, p.Price }).",
+                        nameof(selector));
+                }
+            }
+            return cols.ToArray();
+        }
+
+        // Single property: p => p.Name (possibly boxed via UnaryExpression for value types)
+        var single = body as MemberExpression
+            ?? (body as UnaryExpression)?.Operand as MemberExpression;
+
+        if (single?.Expression is ParameterExpression && single.Member is PropertyInfo singleProp)
+            return new[] { ReflectionHelper.GetColumnName(singleProp) };
+
+        throw new ArgumentException(
+            "Selector must be a simple property access (p => p.Name) " +
+            "or an anonymous type projection (p => new { p.Name, p.Price }).",
+            nameof(selector));
+    }
+
+    /// <summary>
     /// Safe SQL identifier regex: allows alphanumeric/underscore names, dot-qualified names
     /// (schema.table.column), and names wrapped in standard quoting styles
     /// ([name], `name`, "name"). Also allows * for SELECT *.
+    /// Quoted forms use negated character classes so the closing delimiter cannot appear
+    /// inside the identifier (e.g., [Col]umn] is rejected).
     /// Rejects input containing SQL meta-characters such as semicolons, dashes, or slashes
     /// that could be used for injection.
     /// </summary>
     private static readonly Regex _safeIdentifierRegex = new(
-        @"^\*$|^(\[[\w\s]+\]|`[\w\s]+`|""[\w\s]+""|[\w]+)(\.\[[\w\s]+\]|\.`[\w\s]+`|\.""[\w\s]+""|\.[\w]+)*$",
+        "^\\*$|^(\\[[^\\]]+\\]|`[^`]+`|\"[^\"]+\"|\\w+)(\\.\\[[^\\]]+\\]|\\.`[^`]+`|\\.\"[^\"]+\"|\\.\\w+)*$",
         RegexOptions.Compiled | RegexOptions.CultureInvariant);
 
     private static void ValidateSqlIdentifier(string name)

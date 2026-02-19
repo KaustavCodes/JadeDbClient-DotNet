@@ -18,11 +18,13 @@ internal class ExpressionToSqlVisitor<T> : ExpressionVisitor
     private int _paramCounter = 0;
     private readonly IDatabaseService _dbService;
     private readonly DatabaseDialect _dialect;
+    private readonly string? _tablePrefix;
 
-    public ExpressionToSqlVisitor(IDatabaseService dbService)
+    public ExpressionToSqlVisitor(IDatabaseService dbService, string? tablePrefix = null)
     {
         _dbService = dbService ?? throw new ArgumentNullException(nameof(dbService));
         _dialect = dbService.Dialect;
+        _tablePrefix = tablePrefix;
     }
 
     public (string WhereClause, IReadOnlyList<IDbDataParameter> Parameters) Translate(Expression<Func<T, bool>>? predicate)
@@ -81,7 +83,7 @@ internal class ExpressionToSqlVisitor<T> : ExpressionVisitor
             // Property access: x => x.Status
             var propInfo = (PropertyInfo)node.Member;
             var columnName = ReflectionHelper.GetColumnName(propInfo);
-            _sql.Append(columnName);
+            _sql.Append(_tablePrefix != null ? $"{_tablePrefix}.{columnName}" : columnName);
             return node;
         }
 
