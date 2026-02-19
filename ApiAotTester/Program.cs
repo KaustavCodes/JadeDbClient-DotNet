@@ -54,7 +54,7 @@ app.MapGet("/test-builder", async (IDatabaseService dbConfig) =>
         .OrderBy(t => t.FullName)
         .ThenByDescending(t => t.Id)
         .Skip(5)
-        .Take(10).BuildSelect();
+        .Take(10).BuildDelete();
 
 
 
