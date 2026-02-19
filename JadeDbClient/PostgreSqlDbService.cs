@@ -511,7 +511,7 @@ public class PostgreSqlDbService : IDatabaseService
         var properties = typeof(T).GetProperties().Where(p => p.CanRead).ToArray();
         if (properties.Length == 0) throw new InvalidOperationException($"Type {typeof(T).Name} has no readable properties");
 
-        var columnNames = properties.Select(p => p.Name).ToArray();
+        var columnNames = ReflectionHelper.GetColumnNames(properties);
 
         using var connection = new NpgsqlConnection(_connectionString);
         await connection.OpenAsync();
@@ -615,7 +615,7 @@ public class PostgreSqlDbService : IDatabaseService
         var properties = typeof(T).GetProperties().Where(p => p.CanRead).ToArray();
         if (properties.Length == 0) throw new InvalidOperationException($"Type {typeof(T).Name} has no readable properties");
 
-        var columnNames = properties.Select(p => p.Name).ToArray();
+        var columnNames = ReflectionHelper.GetColumnNames(properties);
 
         using var connection = new NpgsqlConnection(_connectionString);
         await connection.OpenAsync();

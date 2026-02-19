@@ -48,7 +48,7 @@ app.MapGet("/test-postgres", async (IDatabaseService dbConfig) =>
     //Execute a stored proceude with output parameter
     List<IDbDataParameter> dbDataParameters = new List<IDbDataParameter>();
 
-    dbDataParameters.Add(dbConfig.GetParameter("p_name", "Jaded", DbType.String, ParameterDirection.Input, 250));
+    dbDataParameters.Add(dbConfig.GetParameter("p_name", "PostgresUser", DbType.String, ParameterDirection.Input, 250));
     dbDataParameters.Add(dbConfig.GetParameter("p_outputparam", "test", DbType.String, ParameterDirection.Output, 250));
 
     Dictionary<string, object> outputParameters = await dbConfig.ExecuteStoredProcedureWithOutputAsync("add_data", dbDataParameters);
@@ -60,7 +60,7 @@ app.MapGet("/test-postgres", async (IDatabaseService dbConfig) =>
 
     //Execute a stored procedure without output parameter
     dbDataParameters = new List<IDbDataParameter>();
-    dbDataParameters.Add(dbConfig.GetParameter("p_name", "Jaded", DbType.String, ParameterDirection.Input, 250));
+    dbDataParameters.Add(dbConfig.GetParameter("p_name", "PostgresUser", DbType.String, ParameterDirection.Input, 250));
     dbDataParameters.Add(dbConfig.GetParameter("p_outputparam", "test", DbType.String, ParameterDirection.Output, 250));
 
     await dbConfig.ExecuteStoredProcedureAsync("add_data", dbDataParameters);
@@ -78,7 +78,7 @@ app.MapGet("/test-mysql", async (IDatabaseService dbConfig) =>
     string insrtQry = "INSERT INTO tbl_test(name) VALUES(@name);";
 
     List<IDbDataParameter> dbDataParameters = new List<IDbDataParameter>();
-    dbDataParameters.Add(dbConfig.GetParameter("@name", "Someone1", DbType.String, ParameterDirection.Input, 250));
+    dbDataParameters.Add(dbConfig.GetParameter("@name", "MySqlUser", DbType.String, ParameterDirection.Input, 250));
 
     await dbConfig.ExecuteCommandAsync(insrtQry, dbDataParameters);
 
