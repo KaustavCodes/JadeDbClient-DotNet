@@ -39,7 +39,6 @@ public static class JadeDbServiceRegistration
             var mapperOptions = serviceProvider.GetRequiredService<JadeDbMapperOptions>();
             var dbServiceOptions = serviceProvider.GetRequiredService<JadeDbServiceOptions>();
             var databaseType = databaseConfigService.GetDatabaseType();
-            var licenseType = databaseConfigService.GetLicenseType();
 
             // Example: log the mode if logging is enabled
             if (dbServiceOptions.EnableLogging)

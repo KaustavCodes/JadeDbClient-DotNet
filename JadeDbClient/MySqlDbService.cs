@@ -6,6 +6,7 @@ using MySqlConnector;
 using System.Diagnostics.CodeAnalysis;
 using JadeDbClient.Helpers;
 using System.Diagnostics;
+using JadeDbClient.Enums;
 
 namespace JadeDbClient;
 
@@ -45,6 +46,8 @@ public class MySqlDbService : IDatabaseService
             Console.WriteLine($"[JadeDbClient] [MYSQL] Execution Time: {elapsedMilliseconds} ms");
         }
     }
+
+    public DatabaseDialect Dialect => DatabaseDialect.MySql;
 
     /// <summary>
     /// Open a connection to the database

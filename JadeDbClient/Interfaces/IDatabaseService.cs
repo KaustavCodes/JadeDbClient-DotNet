@@ -1,10 +1,13 @@
 using System.Data;
 using System.Diagnostics.CodeAnalysis;
+using JadeDbClient.Enums;
 
 namespace JadeDbClient.Interfaces;
 
 public interface IDatabaseService
 {
+    DatabaseDialect Dialect { get; }
+
     IDbConnection? Connection { get; set; }
 
     /// <summary>

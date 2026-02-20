@@ -1,0 +1,496 @@
+using System;
+using System.Collections.Generic;
+using System.Data;
+using System.Linq;
+using System.Linq.Expressions;
+using System.Reflection;
+using System.Text;
+using System.Text.RegularExpressions;
+using JadeDbClient.Interfaces;
+using JadeDbClient.Enums;
+using JadeDbClient.Helpers;
+
+namespace JadeDbClient.Helpers;
+
+public class QueryBuilder<T> where T : class
+{
+    private readonly IDatabaseService _dbService;
+    private readonly DatabaseDialect _dialect;
+    private readonly string _tableName;
+
+    private string[]? _selectColumns;
+    // True when _selectColumns came from an expression or from the default (all cols);
+    // they will be auto-qualified with the main table name when joins are present.
+    // False when they came from the raw-string Select() overload; the caller is
+    // responsible for providing correctly qualified identifiers.
+    private bool _selectColumnsNeedQualification = true;
+    private Expression<Func<T, bool>>? _whereExpression;
+    private readonly List<(string Column, bool IsDescending)> _orderings = new();
+    private int? _limit;
+    private int? _skip;
+    private readonly List<IDbDataParameter> _parameters = new();
+    private readonly List<(string JoinSql, IReadOnlyList<IDbDataParameter> Parameters)> _joins = new();
+
+    public QueryBuilder(IDatabaseService dbService)
+    {
+        _dbService = dbService ?? throw new ArgumentNullException(nameof(dbService));
+        _dialect = dbService.Dialect;
+        _tableName = ReflectionHelper.GetTableName(typeof(T));
+    }
+
+    // ── Fluent methods ──
+
+    /// <summary>
+    /// Selects specific columns by name. Column names are validated to contain only safe
+    /// SQL identifier characters. When joins are present the caller is responsible for
+    /// table-qualifying any ambiguous column names.
+    /// </summary>
+    public QueryBuilder<T> Select(params string[] columns)
+    {
+        foreach (var col in columns)
+            ValidateSqlIdentifier(col);
+        _selectColumns = columns;
+        _selectColumnsNeedQualification = false;
+        return this;
+    }
+
+    /// <summary>
+    /// Selects specific columns using a type-safe LINQ-style expression.
+    /// Supports single property access (<c>p => p.Name</c>) and anonymous-type
+    /// projections (<c>p => new { p.Name, p.Price }</c>).
+    /// Column names are resolved via <see cref="JadeDbColumnAttribute"/> when present.
+    /// </summary>
+    public QueryBuilder<T> Select<TResult>(Expression<Func<T, TResult>> selector)
+    {
+        _selectColumns = ExtractColumnsFromSelector(selector);
+        _selectColumnsNeedQualification = true;
+        return this;
+    }
+
+    public QueryBuilder<T> Where(Expression<Func<T, bool>> where)
+    {
+        _whereExpression = where;
+        return this;
+    }
+
+    // Primary ordering (must be called first)
+    public QueryBuilder<T> OrderBy<TKey>(Expression<Func<T, TKey>> keySelector)
+    {
+        if (_orderings.Count > 0)
+        {
+            throw new InvalidOperationException(
+                "OrderBy / OrderByDescending must be called before any ThenBy / ThenByDescending. " +
+                "Use ThenBy for additional sort criteria.");
+        }
+
+        var column = GetColumnFromExpression(keySelector);
+        _orderings.Add((column, false));
+        return this;
+    }
+
+    public QueryBuilder<T> OrderByDescending<TKey>(Expression<Func<T, TKey>> keySelector)
+    {
+        if (_orderings.Count > 0)
+        {
+            throw new InvalidOperationException(
+                "OrderBy / OrderByDescending must be called before any ThenBy / ThenByDescending. " +
+                "Use ThenByDescending for additional sort criteria.");
+        }
+
+        var column = GetColumnFromExpression(keySelector);
+        _orderings.Add((column, true));
+        return this;
+    }
+
+    // Secondary and subsequent ordering
+    public QueryBuilder<T> ThenBy<TKey>(Expression<Func<T, TKey>> keySelector)
+    {
+        if (_orderings.Count == 0)
+        {
+            throw new InvalidOperationException(
+                "ThenBy / ThenByDescending can only be used after an initial OrderBy or OrderByDescending.");
+        }
+
+        var column = GetColumnFromExpression(keySelector);
+        _orderings.Add((column, false));
+        return this;
+    }
+
+    public QueryBuilder<T> ThenByDescending<TKey>(Expression<Func<T, TKey>> keySelector)
+    {
+        if (_orderings.Count == 0)
+        {
+            throw new InvalidOperationException(
+                "ThenBy / ThenByDescending can only be used after an initial OrderBy or OrderByDescending.");
+        }
+
+        var column = GetColumnFromExpression(keySelector);
+        _orderings.Add((column, true));
+        return this;
+    }
+
+    // Optional legacy string-based OrderBy (with warning)
+    [Obsolete("Prefer expression-based OrderBy/ThenBy for type safety and column attribute support.")]
+    public QueryBuilder<T> OrderBy(string orderBy)
+    {
+        Console.WriteLine("[WARNING] Using legacy string-based OrderBy – prefer expression version for safety");
+        ValidateSqlIdentifier(orderBy);
+        // Simplistic parsing – assumes no DESC/ASC in string
+        _orderings.Add((orderBy, false));
+        return this;
+    }
+
+    public QueryBuilder<T> Take(int limit)
+    {
+        _limit = limit;
+        return this;
+    }
+
+    public QueryBuilder<T> Skip(int skip)
+    {
+        _skip = skip;
+        return this;
+    }
+
+    // ── JOIN methods ─────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// Adds a JOIN clause to the query.
+    /// </summary>
+    /// <typeparam name="TJoin">The type mapped to the table being joined.</typeparam>
+    /// <param name="on">
+    /// An expression specifying the ON condition, e.g.
+    /// <c>(product, category) => product.CategoryId == category.Id</c>.
+    /// Both parameter names must be distinct.
+    /// </param>
+    /// <param name="joinType">The type of join (default: <see cref="JoinType.Inner"/>).</param>
+    public QueryBuilder<T> Join<TJoin>(
+        Expression<Func<T, TJoin, bool>> on,
+        JoinType joinType = JoinType.Inner) where TJoin : class
+    {
+        if (on == null) throw new ArgumentNullException(nameof(on));
+
+        var joinTableName = ReflectionHelper.GetTableName(typeof(TJoin));
+        var leftParam = on.Parameters[0];
+        var rightParam = on.Parameters[1];
+
+        var visitor = new JoinExpressionVisitor(
+            _dbService,
+            leftAlias: _tableName,
+            rightAlias: joinTableName,
+            leftParamName: leftParam.Name!,
+            rightParamName: rightParam.Name!);
+
+        var (onSql, onParams) = visitor.Translate(on);
+
+        var joinKeyword = joinType switch
+        {
+            JoinType.Inner => "INNER JOIN",
+            JoinType.Left  => "LEFT JOIN",
+            JoinType.Right => "RIGHT JOIN",
+            JoinType.Full  => "FULL JOIN",
+            _ => throw new ArgumentOutOfRangeException(nameof(joinType))
+        };
+
+        _joins.Add(($"{joinKeyword} {joinTableName} ON {onSql}", onParams));
+        return this;
+    }
+
+    /// <summary>Shorthand for <see cref="Join{TJoin}"/> with <see cref="JoinType.Left"/>.</summary>
+    public QueryBuilder<T> LeftJoin<TJoin>(Expression<Func<T, TJoin, bool>> on) where TJoin : class
+        => Join(on, JoinType.Left);
+
+    /// <summary>Shorthand for <see cref="Join{TJoin}"/> with <see cref="JoinType.Right"/>.</summary>
+    public QueryBuilder<T> RightJoin<TJoin>(Expression<Func<T, TJoin, bool>> on) where TJoin : class
+        => Join(on, JoinType.Right);
+
+    /// <summary>Shorthand for <see cref="Join{TJoin}"/> with <see cref="JoinType.Full"/>.</summary>
+    public QueryBuilder<T> FullJoin<TJoin>(Expression<Func<T, TJoin, bool>> on) where TJoin : class
+        => Join(on, JoinType.Full);
+
+    // ── Build SELECT ──
+    public (string Sql, IEnumerable<IDbDataParameter> Parameters) BuildSelect()
+    {
+        var sb = new StringBuilder("SELECT ");
+
+        var props = ReflectionHelper.GetMappableProperties(typeof(T));
+        var columns = _selectColumns?.Length > 0
+            ? _selectColumns
+            : ReflectionHelper.GetColumnNames(props);
+
+        // When joins are present, qualify unqualified column names with the main table
+        // name to prevent column-name ambiguity across joined tables.
+        sb.Append(string.Join(", ", columns.Select(QualifyColumn)));
+        sb.Append(" FROM ").Append(_tableName);
+
+        // Append JOIN clauses and collect their parameters
+        foreach (var (joinSql, joinParams) in _joins)
+        {
+            sb.Append(' ').Append(joinSql);
+            _parameters.AddRange(joinParams);
+        }
+
+        AppendWhere(sb);
+
+        // Append ORDER BY (supports multiple levels)
+        if (_orderings.Count > 0)
+        {
+            sb.Append(" ORDER BY ");
+            var orderParts = _orderings.Select(o =>
+                $"{QualifyColumn(o.Column)}{(o.IsDescending ? " DESC" : " ASC")}");
+            sb.Append(string.Join(", ", orderParts));
+        }
+
+        AppendPaging(sb);
+
+        return (sb.ToString(), _parameters);
+    }
+
+    // ── Build INSERT ── (unchanged)
+    public (string Sql, IEnumerable<IDbDataParameter> Parameters) BuildInsert(T entity, bool returnIdentity = false)
+    {
+        var props = ReflectionHelper.GetMappableProperties(typeof(T))
+            .Where(p => p.Name != "Id" && p.CanWrite)
+            .ToArray();
+
+        var columns = ReflectionHelper.GetColumnNames(props);
+        var paramPlaceholders = new List<string>();
+        int paramIndex = 0;
+
+        foreach (var prop in props)
+        {
+            var paramName = $"@p{paramIndex++}";
+            paramPlaceholders.Add(paramName);
+            var value = prop.GetValue(entity);
+            _parameters.Add(_dbService.GetParameter(paramName, value ?? DBNull.Value, InferDbType(prop.PropertyType)));
+        }
+
+        var sql = new StringBuilder($"INSERT INTO {_tableName} ({string.Join(", ", columns)}) VALUES ({string.Join(", ", paramPlaceholders)})");
+
+        if (returnIdentity)
+        {
+            sql.Append(_dialect switch
+            {
+                DatabaseDialect.PostgreSql => " RETURNING id",
+                DatabaseDialect.MsSql => " OUTPUT INSERTED.id",
+                DatabaseDialect.MySql => "; SELECT LAST_INSERT_ID()",
+                _ => ""
+            });
+        }
+
+        return (sql.ToString(), _parameters);
+    }
+
+    // ── Build UPDATE ── (unchanged)
+    public (string Sql, IEnumerable<IDbDataParameter> Parameters) BuildUpdate(T entity)
+    {
+        if (_whereExpression == null)
+            throw new InvalidOperationException("WHERE clause is required for UPDATE operations.");
+
+        var props = ReflectionHelper.GetMappableProperties(typeof(T))
+            .Where(p => p.Name != "Id" && p.CanWrite)
+            .ToArray();
+
+        var setClauses = new List<string>();
+        int paramIndex = 0;
+
+        foreach (var prop in props)
+        {
+            var paramName = $"@p{paramIndex++}";
+            setClauses.Add($"{ReflectionHelper.GetColumnName(prop)} = {paramName}");
+            var value = prop.GetValue(entity);
+            _parameters.Add(_dbService.GetParameter(paramName, value ?? DBNull.Value, InferDbType(prop.PropertyType)));
+        }
+
+        var sql = new StringBuilder($"UPDATE {_tableName} SET {string.Join(", ", setClauses)}");
+        AppendWhere(sql);
+
+        return (sql.ToString(), _parameters);
+    }
+
+    // ── Build DELETE ── (unchanged)
+    public (string Sql, IEnumerable<IDbDataParameter> Parameters) BuildDelete()
+    {
+        if (_whereExpression == null)
+            throw new InvalidOperationException("WHERE clause is required for DELETE operations to prevent accidental full table deletion.");
+
+        var sql = new StringBuilder($"DELETE FROM {_tableName}");
+        AppendWhere(sql);
+
+        return (sql.ToString(), _parameters);
+    }
+
+    private void AppendWhere(StringBuilder sb)
+    {
+        if (_whereExpression == null) return;
+
+        // When joins are present, qualify WHERE column references with the main table
+        // name to avoid ambiguity with same-named columns in joined tables.
+        var tablePrefix = _joins.Count > 0 ? _tableName : null;
+        var visitor = new ExpressionToSqlVisitor<T>(_dbService, tablePrefix);
+        var (whereClause, whereParams) = visitor.Translate(_whereExpression);
+
+        if (!string.IsNullOrWhiteSpace(whereClause))
+        {
+            sb.Append(" WHERE ").Append(whereClause);
+            _parameters.AddRange(whereParams);
+        }
+    }
+
+    private void AppendPaging(StringBuilder sb)
+    {
+        if (_limit == null && _skip == null) return;
+
+        switch (_dialect)
+        {
+            case DatabaseDialect.MsSql:
+                if (_orderings.Count == 0)
+                    throw new InvalidOperationException("At least one ORDER BY clause is required when using Skip/Take with SQL Server.");
+
+                if (_skip.HasValue)
+                    sb.Append($" OFFSET {_skip.Value} ROWS");
+
+                if (_limit.HasValue)
+                    sb.Append($" FETCH NEXT {_limit.Value} ROWS ONLY");
+                break;
+
+            case DatabaseDialect.PostgreSql:
+            case DatabaseDialect.MySql:
+                if (_limit.HasValue)
+                    sb.Append($" LIMIT {_limit.Value}");
+
+                if (_skip.HasValue)
+                    sb.Append($" OFFSET {_skip.Value}");
+                break;
+
+            default:
+                throw new NotSupportedException($"Paging not implemented for dialect {_dialect}");
+        }
+    }
+
+    private static string GetColumnFromExpression<TKey>(Expression<Func<T, TKey>> keySelector)
+    {
+        if (keySelector.Body is not MemberExpression memberExpr ||
+            memberExpr.Member is not PropertyInfo propInfo)
+        {
+            throw new ArgumentException(
+                "OrderBy/ThenBy expression must be a simple property access " +
+                "(e.g. o => o.CreatedAt). Complex expressions are not supported yet.");
+        }
+
+        return ReflectionHelper.GetColumnName(propInfo);
+    }
+
+    /// <summary>
+    /// Qualifies <paramref name="column"/> with the main table name when joins are present
+    /// and the column is not already table-qualified (i.e. does not contain a dot) and is
+    /// not the wildcard <c>*</c>.
+    /// Columns that came from the raw-string <see cref="Select(string[])"/> overload are
+    /// left as-is (<see cref="_selectColumnsNeedQualification"/> is false for those).
+    /// </summary>
+    private string QualifyColumn(string column)
+    {
+        if (_joins.Count == 0) return column;
+        if (column == "*" || column.Contains('.')) return column;
+        if (!_selectColumnsNeedQualification) return column;
+        return $"{_tableName}.{column}";
+    }
+
+    /// <summary>
+    /// Extracts database column names from a LINQ-style selector expression.
+    /// Supports:
+    /// <list type="bullet">
+    ///   <item><c>p => p.Name</c> — single property</item>
+    ///   <item><c>p => new { p.Name, p.Price }</c> — anonymous-type projection</item>
+    /// </list>
+    /// Column names are resolved via <see cref="JadeDbColumnAttribute"/> when present.
+    /// </summary>
+    private static string[] ExtractColumnsFromSelector<TResult>(Expression<Func<T, TResult>> selector)
+    {
+        var body = selector.Body;
+
+        // Anonymous type projection: p => new { p.Name, p.Price }
+        if (body is NewExpression newExpr)
+        {
+            var cols = new List<string>();
+            foreach (var arg in newExpr.Arguments)
+            {
+                var memberExpr = arg as MemberExpression
+                    ?? (arg as UnaryExpression)?.Operand as MemberExpression;
+
+                if (memberExpr?.Expression is ParameterExpression && memberExpr.Member is PropertyInfo prop)
+                {
+                    cols.Add(ReflectionHelper.GetColumnName(prop));
+                }
+                else
+                {
+                    throw new ArgumentException(
+                        "Each member in the anonymous type projection must be a simple property " +
+                        "access (e.g., p => new { p.Name, p.Price }).",
+                        nameof(selector));
+                }
+            }
+            return cols.ToArray();
+        }
+
+        // Single property: p => p.Name (possibly boxed via UnaryExpression for value types)
+        var single = body as MemberExpression
+            ?? (body as UnaryExpression)?.Operand as MemberExpression;
+
+        if (single?.Expression is ParameterExpression && single.Member is PropertyInfo singleProp)
+            return new[] { ReflectionHelper.GetColumnName(singleProp) };
+
+        throw new ArgumentException(
+            "Selector must be a simple property access (p => p.Name) " +
+            "or an anonymous type projection (p => new { p.Name, p.Price }).",
+            nameof(selector));
+    }
+
+    /// <summary>
+    /// Safe SQL identifier regex: allows alphanumeric/underscore names, dot-qualified names
+    /// (schema.table.column), and names wrapped in standard quoting styles
+    /// ([name], `name`, "name"). Also allows * for SELECT *.
+    /// Quoted forms use negated character classes so the closing delimiter cannot appear
+    /// inside the identifier (e.g., [Col]umn] is rejected).
+    /// Rejects input containing SQL meta-characters such as semicolons, dashes, or slashes
+    /// that could be used for injection.
+    /// </summary>
+    private static readonly Regex _safeIdentifierRegex = new(
+        "^\\*$|^(\\[[^\\]]+\\]|`[^`]+`|\"[^\"]+\"|\\w+)(\\.\\[[^\\]]+\\]|\\.`[^`]+`|\\.\"[^\"]+\"|\\.\\w+)*$",
+        RegexOptions.Compiled | RegexOptions.CultureInvariant);
+
+    private static void ValidateSqlIdentifier(string name)
+    {
+        if (string.IsNullOrWhiteSpace(name))
+            throw new ArgumentException("Column name must not be null or empty.", nameof(name));
+
+        if (!_safeIdentifierRegex.IsMatch(name))
+            throw new ArgumentException(
+                $"Column name '{name}' contains invalid characters. " +
+                "Only alphanumeric characters, underscores, dots, and standard quoting ([name], `name`, \"name\") are allowed. " +
+                "Use expression-based methods instead of raw strings wherever possible.",
+                nameof(name));
+    }
+
+    private static DbType InferDbType(Type type)
+    {
+        type = Nullable.GetUnderlyingType(type) ?? type;
+
+        return type switch
+        {
+            Type t when t == typeof(bool) => DbType.Boolean,
+            Type t when t == typeof(byte) => DbType.Byte,
+            Type t when t == typeof(short) => DbType.Int16,
+            Type t when t == typeof(int) => DbType.Int32,
+            Type t when t == typeof(long) => DbType.Int64,
+            Type t when t == typeof(float) => DbType.Single,
+            Type t when t == typeof(double) => DbType.Double,
+            Type t when t == typeof(decimal) => DbType.Decimal,
+            Type t when t == typeof(DateTime) => DbType.DateTime2,
+            Type t when t == typeof(Guid) => DbType.Guid,
+            Type t when t == typeof(string) => DbType.String,
+            Type t when t == typeof(byte[]) => DbType.Binary,
+            _ => DbType.Object
+        };
+    }
+}

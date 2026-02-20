@@ -6,6 +6,7 @@ using Npgsql;
 using System.Diagnostics.CodeAnalysis;
 using JadeDbClient.Helpers;
 using System.Diagnostics;
+using JadeDbClient.Enums;
 
 namespace JadeDbClient;
 
@@ -44,6 +45,8 @@ public class PostgreSqlDbService : IDatabaseService
             Console.WriteLine($"[JadeDbClient] [POSTGRES] Execution Time: {elapsedMilliseconds} ms");
         }
     }
+
+    public DatabaseDialect Dialect => DatabaseDialect.PostgreSql;
 
     /// <summary>
     /// Open a connection to the database
