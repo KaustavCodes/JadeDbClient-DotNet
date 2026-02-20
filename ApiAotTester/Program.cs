@@ -46,6 +46,119 @@ if (app.Environment.IsDevelopment())
 
 // ========= NEW Query Builder =========
 
+// ── Single comprehensive endpoint that showcases ALL dynamic query types ──
+app.MapGet("/test-query-showcase", (IDatabaseService dbConfig) =>
+{
+    var entries = new List<QueryShowcaseEntry>();
+    var now = new DateTime(2024, 6, 15, 12, 0, 0, DateTimeKind.Utc);
+
+    // Helper: format parameters into a readable string
+    static string FormatParams(IEnumerable<IDbDataParameter> ps) =>
+        string.Join(", ", ps.Select(p => $"{p.ParameterName}={p.Value} ({p.DbType})"));
+
+    // ── 1. Simple SELECT (all columns) ────────────────────────────────────
+    var (sql, prms) = new QueryBuilder<ShowcaseOrder>(dbConfig).BuildSelect();
+    entries.Add(new QueryShowcaseEntry("1. SELECT – all columns", sql, FormatParams(prms)));
+
+    // ── 2. SELECT with WHERE ──────────────────────────────────────────────
+    (sql, prms) = new QueryBuilder<ShowcaseOrder>(dbConfig)
+        .Where(o => o.Status == "active" && o.TotalAmount > 100m)
+        .BuildSelect();
+    entries.Add(new QueryShowcaseEntry("2. SELECT – WHERE with AND condition", sql, FormatParams(prms)));
+
+    // ── 3. SELECT specific columns (expression-based) ─────────────────────
+    (sql, prms) = new QueryBuilder<ShowcaseOrder>(dbConfig)
+        .Select(o => new { o.CustomerId, o.TotalAmount })
+        .BuildSelect();
+    entries.Add(new QueryShowcaseEntry("3. SELECT – expression-based column projection", sql, FormatParams(prms)));
+
+    // ── 4. SELECT with ORDER BY + ThenByDescending ────────────────────────
+    (sql, prms) = new QueryBuilder<ShowcaseOrder>(dbConfig)
+        .Where(o => o.TotalAmount > 0m)
+        .OrderBy(o => o.Status)
+        .ThenByDescending(o => o.TotalAmount)
+        .BuildSelect();
+    entries.Add(new QueryShowcaseEntry("4. SELECT – ORDER BY + ThenByDescending", sql, FormatParams(prms)));
+
+    // ── 5. SELECT with pagination (Skip + Take) ───────────────────────────
+    (sql, prms) = new QueryBuilder<ShowcaseOrder>(dbConfig)
+        .OrderBy(o => o.CreatedAt)
+        .Skip(20)
+        .Take(10)
+        .BuildSelect();
+    entries.Add(new QueryShowcaseEntry("5. SELECT – pagination (Skip 20, Take 10)", sql, FormatParams(prms)));
+
+    // ── 6. INNER JOIN ─────────────────────────────────────────────────────
+    (sql, prms) = new QueryBuilder<ShowcaseOrder>(dbConfig)
+        .Join<ShowcaseCustomer>((o, c) => o.CustomerId == c.Id)
+        .BuildSelect();
+    entries.Add(new QueryShowcaseEntry("6. SELECT – INNER JOIN orders ⟶ customers", sql, FormatParams(prms)));
+
+    // ── 7. LEFT JOIN ──────────────────────────────────────────────────────
+    (sql, prms) = new QueryBuilder<ShowcaseOrder>(dbConfig)
+        .LeftJoin<ShowcaseCustomer>((o, c) => o.CustomerId == c.Id)
+        .BuildSelect();
+    entries.Add(new QueryShowcaseEntry("7. SELECT – LEFT JOIN orders ⟶ customers", sql, FormatParams(prms)));
+
+    // ── 8. RIGHT JOIN ─────────────────────────────────────────────────────
+    (sql, prms) = new QueryBuilder<ShowcaseOrder>(dbConfig)
+        .RightJoin<ShowcaseCustomer>((o, c) => o.CustomerId == c.Id)
+        .BuildSelect();
+    entries.Add(new QueryShowcaseEntry("8. SELECT – RIGHT JOIN orders ⟶ customers", sql, FormatParams(prms)));
+
+    // ── 9. FULL JOIN ──────────────────────────────────────────────────────
+    (sql, prms) = new QueryBuilder<ShowcaseOrder>(dbConfig)
+        .FullJoin<ShowcaseCustomer>((o, c) => o.CustomerId == c.Id)
+        .BuildSelect();
+    entries.Add(new QueryShowcaseEntry("9. SELECT – FULL JOIN orders ⟶ customers", sql, FormatParams(prms)));
+
+    // ── 10. JOIN + explicit column selection ──────────────────────────────
+    (sql, prms) = new QueryBuilder<ShowcaseOrder>(dbConfig)
+        .Join<ShowcaseCustomer>((o, c) => o.CustomerId == c.Id)
+        .Select("orders.TotalAmount", "orders.Status", "customers.Email")
+        .BuildSelect();
+    entries.Add(new QueryShowcaseEntry("10. SELECT – JOIN with explicit column selection", sql, FormatParams(prms)));
+
+    // ── 11. JOIN + WHERE + ORDER BY + pagination ──────────────────────────
+    (sql, prms) = new QueryBuilder<ShowcaseOrder>(dbConfig)
+        .Join<ShowcaseCustomer>((o, c) => o.CustomerId == c.Id)
+        .Where(o => o.Status == "shipped" && o.TotalAmount >= 50m)
+        .OrderBy(o => o.CreatedAt)
+        .Skip(0)
+        .Take(5)
+        .BuildSelect();
+    entries.Add(new QueryShowcaseEntry("11. SELECT – JOIN + WHERE + ORDER BY + pagination", sql, FormatParams(prms)));
+
+    // ── 12. INSERT ────────────────────────────────────────────────────────
+    var newOrder = new ShowcaseOrder { CustomerId = 42, TotalAmount = 299.99m, Status = "pending", CreatedAt = now };
+    (sql, prms) = new QueryBuilder<ShowcaseOrder>(dbConfig).BuildInsert(newOrder);
+    entries.Add(new QueryShowcaseEntry("12. INSERT", sql, FormatParams(prms)));
+
+    // ── 13. INSERT with return identity ───────────────────────────────────
+    (sql, prms) = new QueryBuilder<ShowcaseOrder>(dbConfig).BuildInsert(newOrder, returnIdentity: true);
+    entries.Add(new QueryShowcaseEntry("13. INSERT – with return identity", sql, FormatParams(prms)));
+
+    // ── 14. UPDATE ────────────────────────────────────────────────────────
+    var updatedOrder = new ShowcaseOrder { CustomerId = 42, TotalAmount = 399.99m, Status = "shipped", CreatedAt = now };
+    (sql, prms) = new QueryBuilder<ShowcaseOrder>(dbConfig)
+        .Where(o => o.Id == 7)
+        .BuildUpdate(updatedOrder);
+    entries.Add(new QueryShowcaseEntry("14. UPDATE – with WHERE", sql, FormatParams(prms)));
+
+    // ── 15. DELETE ────────────────────────────────────────────────────────
+    (sql, prms) = new QueryBuilder<ShowcaseOrder>(dbConfig)
+        .Where(o => o.Status == "cancelled")
+        .BuildDelete();
+    entries.Add(new QueryShowcaseEntry("15. DELETE – with WHERE", sql, FormatParams(prms)));
+
+    return Results.Ok(new QueryShowcaseResponse
+    {
+        Dialect = dbConfig.Dialect.ToString(),
+        TotalQueries = entries.Count,
+        Queries = entries
+    });
+});
+
 
 app.MapGet("/test-builder", async (IDatabaseService dbConfig) =>
 {
@@ -637,6 +750,60 @@ public class QueryBuilderResponse
     public string? Parameters { get; set; } = "";
 }
 
+// ── Showcase models ──────────────────────────────────────────────────────────
+
+[JadeDbObject]
+[JadeDbTable("orders")]
+public partial class ShowcaseOrder
+{
+    public int Id { get; set; }
+
+    [JadeDbColumn("customer_id")]
+    public int CustomerId { get; set; }
+
+    [JadeDbColumn("total_amount")]
+    public decimal TotalAmount { get; set; }
+
+    public string Status { get; set; } = string.Empty;
+
+    [JadeDbColumn("created_at")]
+    public DateTime CreatedAt { get; set; }
+}
+
+[JadeDbObject]
+[JadeDbTable("customers")]
+public partial class ShowcaseCustomer
+{
+    public int Id { get; set; }
+
+    [JadeDbColumn("full_name")]
+    public string FullName { get; set; } = string.Empty;
+
+    public string Email { get; set; } = string.Empty;
+}
+
+public class QueryShowcaseEntry
+{
+    public QueryShowcaseEntry() { }
+    public QueryShowcaseEntry(string label, string sql, string parameters)
+    {
+        Label = label;
+        Sql = sql;
+        Parameters = parameters;
+    }
+
+    public string Label { get; set; } = "";
+    public string Sql { get; set; } = "";
+    public string Parameters { get; set; } = "";
+}
+
+public class QueryShowcaseResponse
+{
+    public string Dialect { get; set; } = "";
+    public int TotalQueries { get; set; }
+    public List<QueryShowcaseEntry> Queries { get; set; } = new();
+}
+
 [JsonSerializable(typeof(IEnumerable<DataModel>))]
 [JsonSerializable(typeof(List<DataModel>))]
 [JsonSerializable(typeof(DataModel))]
@@ -655,6 +822,9 @@ public class QueryBuilderResponse
 [JsonSerializable(typeof(PerformanceModeResult))]
 [JsonSerializable(typeof(List<PerformanceModeResult>))]
 [JsonSerializable(typeof(QueryBuilderResponse))]
+[JsonSerializable(typeof(QueryShowcaseEntry))]
+[JsonSerializable(typeof(List<QueryShowcaseEntry>))]
+[JsonSerializable(typeof(QueryShowcaseResponse))]
 internal partial class AppJsonSerializerContext : JsonSerializerContext
 {
 
