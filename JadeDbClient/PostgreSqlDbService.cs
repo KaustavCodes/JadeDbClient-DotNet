@@ -34,6 +34,14 @@ public class PostgreSqlDbService : IDatabaseService
         _mapper = new Mapper(mapperOptions, _serviceOptions);
     }
 
+    public PostgreSqlDbService(string connectionString, JadeDbMapperOptions mapperOptions, JadeDbServiceRegistration.JadeDbServiceOptions serviceOptions)
+    {
+        _connectionString = connectionString ?? throw new ArgumentNullException(nameof(connectionString));
+        _mapperOptions = mapperOptions ?? throw new ArgumentNullException(nameof(mapperOptions));
+        _serviceOptions = serviceOptions ?? new JadeDbServiceRegistration.JadeDbServiceOptions();
+        _mapper = new Mapper(mapperOptions, _serviceOptions);
+    }
+
     private void LogQueryExecution(string query, long elapsedMilliseconds)
     {
         if (_serviceOptions.EnableLogging)
