@@ -262,15 +262,149 @@ public class MultipleConnectionTests
     // -------------------------------------------------------------------------
 
     [Fact]
-    public void IJadeDbServiceFactory_HasGetServiceMethod()
+    public void IJadeDbServiceFactory_HasGetServiceWithNameMethod()
     {
-        var method = typeof(IJadeDbServiceFactory).GetMethod("GetService");
+        var method = typeof(IJadeDbServiceFactory).GetMethod("GetService", new[] { typeof(string) });
 
         Assert.NotNull(method);
         var param = method!.GetParameters();
         Assert.Single(param);
         Assert.Equal(typeof(string), param[0].ParameterType);
         Assert.Equal(typeof(IDatabaseService), method.ReturnType);
+    }
+
+    [Fact]
+    public void IJadeDbServiceFactory_HasGetServiceNoArgMethod()
+    {
+        var method = typeof(IJadeDbServiceFactory).GetMethod("GetService", Type.EmptyTypes);
+
+        Assert.NotNull(method);
+        Assert.Empty(method!.GetParameters());
+        Assert.Equal(typeof(IDatabaseService), method.ReturnType);
+    }
+
+    // -------------------------------------------------------------------------
+    // Default connection – programmatic
+    // -------------------------------------------------------------------------
+
+    [Fact]
+    public void SetDefaultConnection_FactoryGetServiceNoArg_ReturnsDefault()
+    {
+        var services = BuildServiceProvider(null, c =>
+            c.AddConnection("main",    "MsSql",     "Server=localhost;")
+             .AddConnection("reports", "PostgreSQL", "Host=localhost;")
+             .SetDefaultConnection("main"));
+
+        var factory = services.GetRequiredService<IJadeDbServiceFactory>();
+
+        var defaultDb = factory.GetService();
+        Assert.IsType<MsSqlDbService>(defaultDb);
+    }
+
+    [Fact]
+    public void SetDefaultConnection_IDatabaseServiceInjection_ReturnsDefault()
+    {
+        var services = BuildServiceProvider(null, c =>
+            c.AddConnection("main",    "MsSql",     "Server=localhost;")
+             .AddConnection("reports", "PostgreSQL", "Host=localhost;")
+             .SetDefaultConnection("main"));
+
+        // IDatabaseService should resolve to the default without touching the factory.
+        var db = services.GetRequiredService<IDatabaseService>();
+        Assert.IsType<MsSqlDbService>(db);
+    }
+
+    [Fact]
+    public void SetDefaultConnection_NamedGetServiceStillWorks()
+    {
+        var services = BuildServiceProvider(null, c =>
+            c.AddConnection("main",    "MsSql",     "Server=localhost;")
+             .AddConnection("reports", "PostgreSQL", "Host=localhost;")
+             .SetDefaultConnection("main"));
+
+        var factory = services.GetRequiredService<IJadeDbServiceFactory>();
+
+        Assert.IsType<MsSqlDbService>(factory.GetService("main"));
+        Assert.IsType<PostgreSqlDbService>(factory.GetService("reports"));
+    }
+
+    [Fact]
+    public void NoDefaultConnection_FactoryGetServiceNoArg_ThrowsInvalidOperation()
+    {
+        var services = BuildServiceProvider(null, c =>
+            c.AddConnection("main", "MsSql", "Server=localhost;"));
+
+        var factory = services.GetRequiredService<IJadeDbServiceFactory>();
+
+        Assert.Throws<InvalidOperationException>(() => factory.GetService());
+    }
+
+    [Fact]
+    public void SetDefaultConnection_SameDbType_MultipleConnections_ResolvesCorrectDefault()
+    {
+        // Two MsSql connections; default is "secondary".
+        var services = BuildServiceProvider(null, c =>
+            c.AddConnection("primary",   "MsSql", "Server=primary;")
+             .AddConnection("secondary", "MsSql", "Server=secondary;")
+             .SetDefaultConnection("secondary"));
+
+        var factory = services.GetRequiredService<IJadeDbServiceFactory>();
+
+        // Both are MsSql; the default is "secondary".
+        Assert.IsType<MsSqlDbService>(factory.GetService("primary"));
+        Assert.IsType<MsSqlDbService>(factory.GetService("secondary"));
+        Assert.Same(factory.GetService("secondary"), factory.GetService());
+    }
+
+    [Fact]
+    public void SetDefaultConnection_UnknownName_ThrowsOnFactoryResolution()
+    {
+        var services = BuildServiceProvider(null, c =>
+            c.AddConnection("main", "MsSql", "Server=localhost;")
+             .SetDefaultConnection("doesNotExist"));
+
+        Assert.Throws<InvalidOperationException>(() => services.GetRequiredService<IJadeDbServiceFactory>());
+    }
+
+    // -------------------------------------------------------------------------
+    // Default connection – configuration-based
+    // -------------------------------------------------------------------------
+
+    [Fact]
+    public void DefaultConnection_ConfigurationBased_ReturnsDesignatedDefault()
+    {
+        var config = new Dictionary<string, string?>
+        {
+            ["JadeDb:DefaultConnection"] = "reports",
+            ["JadeDb:Connections:main:DatabaseType"]       = "MsSql",
+            ["JadeDb:Connections:main:ConnectionString"]   = "Server=localhost;",
+            ["JadeDb:Connections:reports:DatabaseType"]    = "PostgreSQL",
+            ["JadeDb:Connections:reports:ConnectionString"] = "Host=localhost;",
+        };
+
+        var services = BuildServiceProvider(config);
+        var factory = services.GetRequiredService<IJadeDbServiceFactory>();
+
+        Assert.IsType<PostgreSqlDbService>(factory.GetService());
+    }
+
+    [Fact]
+    public void DefaultConnection_ProgrammaticOverridesConfigDefault()
+    {
+        // Config default is "reports" (PostgreSQL), programmatic overrides to "main" (MsSql).
+        var config = new Dictionary<string, string?>
+        {
+            ["JadeDb:DefaultConnection"] = "reports",
+            ["JadeDb:Connections:main:DatabaseType"]       = "MsSql",
+            ["JadeDb:Connections:main:ConnectionString"]   = "Server=localhost;",
+            ["JadeDb:Connections:reports:DatabaseType"]    = "PostgreSQL",
+            ["JadeDb:Connections:reports:ConnectionString"] = "Host=localhost;",
+        };
+
+        var services = BuildServiceProvider(config, c => c.SetDefaultConnection("main"));
+        var factory = services.GetRequiredService<IJadeDbServiceFactory>();
+
+        Assert.IsType<MsSqlDbService>(factory.GetService());
     }
 
     // -------------------------------------------------------------------------

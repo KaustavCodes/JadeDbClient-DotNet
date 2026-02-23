@@ -14,4 +14,15 @@ public interface IJadeDbServiceFactory
     /// Thrown when no connection is registered with the given name.
     /// </exception>
     IDatabaseService GetService(string name);
+
+    /// <summary>
+    /// Retrieves the default <see cref="IDatabaseService"/>.
+    /// </summary>
+    /// <returns>The default <see cref="IDatabaseService"/>.</returns>
+    /// <exception cref="InvalidOperationException">
+    /// Thrown when no default connection has been designated via
+    /// <see cref="JadeDbClient.Initialize.JadeDbNamedConnectionsBuilder.SetDefaultConnection"/> or the
+    /// <c>JadeDb:DefaultConnection</c> configuration key.
+    /// </exception>
+    IDatabaseService GetService();
 }

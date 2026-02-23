@@ -123,9 +123,15 @@ public static class JadeDbServiceRegistration
                     if (!string.IsNullOrEmpty(dbType) && !string.IsNullOrEmpty(connStr))
                         builder.AddConnection(child.Key, dbType, connStr);
                 }
+
+                // Read the default connection name from config if not already set programmatically.
+                var configDefault = configuration["JadeDb:DefaultConnection"];
+                if (!string.IsNullOrWhiteSpace(configDefault))
+                    builder.SetDefaultConnection(configDefault);
             }
 
             // Apply programmatic configuration (overrides config-based entries with the same name).
+            // Programmatic SetDefaultConnection also overrides the config-based one.
             configure?.Invoke(builder);
 
             var namedServices = new Dictionary<string, IDatabaseService>();
@@ -134,7 +140,25 @@ public static class JadeDbServiceRegistration
                 namedServices[name] = CreateDbService(dbType, connStr, mapperOptions, serviceOptions);
             }
 
-            return new JadeDbServiceFactory(namedServices);
+            // Resolve the default service if one has been designated.
+            IDatabaseService? defaultService = null;
+            if (builder.DefaultConnectionName != null)
+            {
+                if (!namedServices.TryGetValue(builder.DefaultConnectionName, out defaultService))
+                    throw new InvalidOperationException(
+                        $"The default connection '{builder.DefaultConnectionName}' was not found. " +
+                        $"Registered connections: {string.Join(", ", namedServices.Keys)}");
+            }
+
+            return new JadeDbServiceFactory(namedServices, defaultService);
+        });
+
+        // Also register IDatabaseService so it can be injected directly without the factory.
+        // It delegates to the factory's default service.
+        services.AddSingleton<IDatabaseService>(serviceProvider =>
+        {
+            var factory = serviceProvider.GetRequiredService<IJadeDbServiceFactory>();
+            return factory.GetService();
         });
     }
 
@@ -165,6 +189,11 @@ public class JadeDbNamedConnectionsBuilder
     internal IReadOnlyDictionary<string, (string DatabaseType, string ConnectionString)> Connections => _connections;
 
     /// <summary>
+    /// The name of the default connection, or <c>null</c> if no default has been set.
+    /// </summary>
+    public string? DefaultConnectionName { get; private set; }
+
+    /// <summary>
     /// Registers a named database connection.
     /// </summary>
     /// <param name="name">A unique name for this connection (e.g. <c>"default"</c>, <c>"reports"</c>).</param>
@@ -177,6 +206,20 @@ public class JadeDbNamedConnectionsBuilder
         if (string.IsNullOrWhiteSpace(connectionString)) throw new ArgumentException("Connection string must not be null or whitespace.", nameof(connectionString));
 
         _connections[name] = (databaseType, connectionString);
+        return this;
+    }
+
+    /// <summary>
+    /// Designates the connection with the given <paramref name="name"/> as the default connection.
+    /// The default connection is returned by <see cref="IJadeDbServiceFactory.GetService()"/> (no-arg overload)
+    /// and is also registered directly as <see cref="IDatabaseService"/> in the DI container so it can be
+    /// injected without touching the factory at all.
+    /// </summary>
+    /// <param name="name">The name of an already-registered connection to use as the default.</param>
+    public JadeDbNamedConnectionsBuilder SetDefaultConnection(string name)
+    {
+        if (string.IsNullOrWhiteSpace(name)) throw new ArgumentException("Connection name must not be null or whitespace.", nameof(name));
+        DefaultConnectionName = name;
         return this;
     }
 }
