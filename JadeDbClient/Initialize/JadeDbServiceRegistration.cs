@@ -60,59 +60,39 @@ public static class JadeDbServiceRegistration
     /// <summary>
     /// Registers multiple named database connections and an <see cref="IJadeDbServiceFactory"/> that can resolve them by name.
     /// <para>
-    /// Connections can be configured programmatically via <paramref name="configure"/>, or loaded automatically from
-    /// the <c>JadeDb:Connections</c> / <c>JadeDb:DefaultConnection</c> configuration keys, or both.
-    /// Programmatic entries and <see cref="JadeDbNamedConnectionsBuilder.SetDefaultConnection"/> always take
-    /// precedence over configuration values with the same name.
+    /// The recommended approach is to define all connections in <c>appsettings.json</c> under
+    /// <c>JadeDb:Connections</c>. The key you give each entry (e.g. <c>"main"</c>, <c>"reports"</c>) is
+    /// exactly the name used to resolve the connection — no additional mapping is required.
+    /// Set <c>JadeDb:DefaultConnection</c> to designate which connection is injected as
+    /// <see cref="Interfaces.IDatabaseService"/> directly.
     /// </para>
     /// <para>
-    /// When a default connection is designated (via <see cref="JadeDbNamedConnectionsBuilder.SetDefaultConnection"/>
-    /// or the <c>JadeDb:DefaultConnection</c> config key), <see cref="Interfaces.IDatabaseService"/> is also
-    /// registered in the DI container so existing code that injects <see cref="Interfaces.IDatabaseService"/>
-    /// directly continues to work without modification.
+    /// Optionally pass a <paramref name="configure"/> action to add or override connections at startup
+    /// (e.g. for dynamically computed connection strings). Programmatic entries always take precedence
+    /// over configuration values with the same name.
     /// </para>
     /// <para>
-    /// <b>Never hardcode connection strings.</b> Always read them from <c>IConfiguration</c>
-    /// (appsettings.json, environment variables, or a secrets manager).
+    /// When a default connection is designated (via the <c>JadeDb:DefaultConnection</c> config key or
+    /// <see cref="JadeDbNamedConnectionsBuilder.SetDefaultConnection"/>),
+    /// <see cref="Interfaces.IDatabaseService"/> is also registered in the DI container so that existing
+    /// code injecting <see cref="Interfaces.IDatabaseService"/> directly continues to work unchanged.
     /// </para>
     /// <example>
-    /// Recommended – fully configuration-driven (appsettings.json / environment):
+    /// appsettings.json — the connection keys ("main", "reports") become the names used in code:
     /// <code>
-    /// // appsettings.json
-    /// // {
-    /// //   "JadeDb": {
-    /// //     "DefaultConnection": "main",
-    /// //     "Connections": {
-    /// //       "main":    { "DatabaseType": "MsSql",     "ConnectionString": "..." },
-    /// //       "reports": { "DatabaseType": "PostgreSQL", "ConnectionString": "..." }
-    /// //     }
-    /// //   }
-    /// // }
-    ///
-    /// // Program.cs — no connection strings in code at all
-    /// builder.Services.AddJadeDbNamedConnections(
-    ///     serviceOptionsConfigure: options =>
-    ///     {
-    ///         options.EnableLogging    = true;
-    ///         options.LogExecutedQuery = true;
-    ///     });
+    /// {
+    ///   "JadeDb": {
+    ///     "DefaultConnection": "main",
+    ///     "Connections": {
+    ///       "main":    { "DatabaseType": "MsSql",     "ConnectionString": "..." },
+    ///       "reports": { "DatabaseType": "PostgreSQL", "ConnectionString": "..." }
+    ///     }
+    ///   }
+    /// }
     /// </code>
-    /// Programmatic registration reading connection strings from IConfiguration:
+    /// Program.cs — zero connection strings in code:
     /// <code>
-    /// var config = builder.Configuration;
-    ///
     /// builder.Services.AddJadeDbNamedConnections(
-    ///     configure: connections =>
-    ///     {
-    ///         connections
-    ///             .AddConnection("main",    "MsSql",
-    ///                 config.GetConnectionString("MainDb")    ?? throw new InvalidOperationException("Missing 'MainDb'."))
-    ///             .AddConnection("reports", "PostgreSQL",
-    ///                 config.GetConnectionString("ReportsDb") ?? throw new InvalidOperationException("Missing 'ReportsDb'."))
-    ///             .AddConnection("cache",   "MySql",
-    ///                 config.GetConnectionString("CacheDb")   ?? throw new InvalidOperationException("Missing 'CacheDb'."))
-    ///             .SetDefaultConnection("main");   // optional – makes "main" injectable as IDatabaseService
-    ///     },
     ///     mapperConfigure: options =>
     ///     {
     ///         // Only needed for third-party models you cannot decorate with [JadeDbObject]
@@ -128,7 +108,7 @@ public static class JadeDbServiceRegistration
     ///         options.LogExecutedQuery = true;   // log executed SQL (default: false)
     ///     });
     /// </code>
-    /// Inject the default connection directly (no factory required):
+    /// Inject the default connection directly — the "main" key from appsettings:
     /// <code>
     /// public class OrderService(IDatabaseService db)  // receives the default ("main")
     /// {
@@ -136,14 +116,14 @@ public static class JadeDbServiceRegistration
     ///         => db.ExecuteQueryAsync&lt;Order&gt;("SELECT * FROM Orders");
     /// }
     /// </code>
-    /// Resolve any named connection via the factory:
+    /// Resolve any connection by its appsettings key via the factory:
     /// <code>
     /// public class ReportService(IJadeDbServiceFactory dbFactory)
     /// {
     ///     public async Task DoWork()
     ///     {
     ///         var main    = dbFactory.GetService();          // returns the default ("main")
-    ///         var reports = dbFactory.GetService("reports"); // returns the "reports" connection
+    ///         var reports = dbFactory.GetService("reports"); // the "reports" key from appsettings
     ///     }
     /// }
     /// </code>
