@@ -71,16 +71,46 @@ public static class JadeDbServiceRegistration
     /// registered in the DI container so existing code that injects <see cref="Interfaces.IDatabaseService"/>
     /// directly continues to work without modification.
     /// </para>
+    /// <para>
+    /// <b>Never hardcode connection strings.</b> Always read them from <c>IConfiguration</c>
+    /// (appsettings.json, environment variables, or a secrets manager).
+    /// </para>
     /// <example>
-    /// Full example – Program.cs:
+    /// Recommended – fully configuration-driven (appsettings.json / environment):
     /// <code>
+    /// // appsettings.json
+    /// // {
+    /// //   "JadeDb": {
+    /// //     "DefaultConnection": "main",
+    /// //     "Connections": {
+    /// //       "main":    { "DatabaseType": "MsSql",     "ConnectionString": "..." },
+    /// //       "reports": { "DatabaseType": "PostgreSQL", "ConnectionString": "..." }
+    /// //     }
+    /// //   }
+    /// // }
+    ///
+    /// // Program.cs — no connection strings in code at all
+    /// builder.Services.AddJadeDbNamedConnections(
+    ///     serviceOptionsConfigure: options =>
+    ///     {
+    ///         options.EnableLogging    = true;
+    ///         options.LogExecutedQuery = true;
+    ///     });
+    /// </code>
+    /// Programmatic registration reading connection strings from IConfiguration:
+    /// <code>
+    /// var config = builder.Configuration;
+    ///
     /// builder.Services.AddJadeDbNamedConnections(
     ///     configure: connections =>
     ///     {
     ///         connections
-    ///             .AddConnection("main",    "MsSql",     "Server=main-db;Database=App;User Id=sa;Password=***;TrustServerCertificate=True;")
-    ///             .AddConnection("reports", "PostgreSQL", "Host=reports-db;Database=Reports;Username=app;Password=***;")
-    ///             .AddConnection("cache",   "MySql",      "Server=cache-db;Database=Cache;User=app;Password=***;")
+    ///             .AddConnection("main",    "MsSql",
+    ///                 config.GetConnectionString("MainDb")    ?? throw new InvalidOperationException("Missing 'MainDb'."))
+    ///             .AddConnection("reports", "PostgreSQL",
+    ///                 config.GetConnectionString("ReportsDb") ?? throw new InvalidOperationException("Missing 'ReportsDb'."))
+    ///             .AddConnection("cache",   "MySql",
+    ///                 config.GetConnectionString("CacheDb")   ?? throw new InvalidOperationException("Missing 'CacheDb'."))
     ///             .SetDefaultConnection("main");   // optional – makes "main" injectable as IDatabaseService
     ///     },
     ///     mapperConfigure: options =>

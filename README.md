@@ -123,22 +123,80 @@ If your application needs to connect to **more than one database** at the same t
 | Multiple connections, different DB types | `AddJadeDbNamedConnections()` |
 | Multiple connections, same DB type | `AddJadeDbNamedConnections()` |
 
+> **⚠️ Never hardcode connection strings in source code.** Always load them from `appsettings.json`, environment variables, or a secrets manager (e.g. Azure Key Vault, AWS Secrets Manager). The examples below demonstrate this.
+
 ---
 
-#### Scenario A — Multiple connections, different DB types
+#### ✅ Recommended — Fully configuration-driven (zero connection strings in code)
 
-Register each connection with a name, pick a default, and optionally configure logging:
+Put everything in `appsettings.json` and call `AddJadeDbNamedConnections` with no connection strings at all:
+
+```json
+// appsettings.json
+{
+  "JadeDb": {
+    "DefaultConnection": "main",
+    "Connections": {
+      "main": {
+        "DatabaseType": "MsSql",
+        "ConnectionString": "Server=main-db;Database=App;User Id=sa;Password=YOUR_PASSWORD;TrustServerCertificate=True;"
+      },
+      "reports": {
+        "DatabaseType": "PostgreSQL",
+        "ConnectionString": "Host=reports-db;Database=Reports;Username=app;Password=YOUR_PASSWORD;"
+      }
+    }
+  }
+}
+```
+
+```csharp
+// Program.cs — no connection strings in code at all
+using JadeDbClient.Initialize;
+
+builder.Services.AddJadeDbNamedConnections(
+    serviceOptionsConfigure: options =>
+    {
+        options.EnableLogging    = true;   // log query timing (default: false)
+        options.LogExecutedQuery = true;   // log executed SQL  (default: false)
+    });
+```
+
+In production, override the `ConnectionString` values with environment variables or a secrets manager — never commit real passwords to source control.
+
+Config and code can be combined; programmatic calls always win over config values with the same key.
+
+---
+
+#### Scenario A — Multiple connections, different DB types (reading from appsettings)
+
+If you prefer to register connections in code, read them from `IConfiguration` — never hardcode:
+
+```json
+// appsettings.json
+{
+  "ConnectionStrings": {
+    "MainDb":    "Server=main-db;Database=App;User Id=sa;Password=YOUR_PASSWORD;TrustServerCertificate=True;",
+    "ReportsDb": "Host=reports-db;Database=Reports;Username=app;Password=YOUR_PASSWORD;"
+  }
+}
+```
 
 ```csharp
 // Program.cs
 using JadeDbClient.Initialize;
 
+// Read connection strings from configuration — never hardcode them
+var config = builder.Configuration;
+
 builder.Services.AddJadeDbNamedConnections(
     configure: connections =>
     {
         connections
-            .AddConnection("main",    "MsSql",     "Server=main-db;Database=App;User Id=sa;Password=***;TrustServerCertificate=True;")
-            .AddConnection("reports", "PostgreSQL", "Host=reports-db;Database=Reports;Username=app;Password=***;")
+            .AddConnection("main",    "MsSql",
+                config.GetConnectionString("MainDb")    ?? throw new InvalidOperationException("Connection string 'MainDb' not found."))
+            .AddConnection("reports", "PostgreSQL",
+                config.GetConnectionString("ReportsDb") ?? throw new InvalidOperationException("Connection string 'ReportsDb' not found."))
             .SetDefaultConnection("main");   // "main" becomes the default – see usage below
     },
     serviceOptionsConfigure: options =>
@@ -150,29 +208,59 @@ builder.Services.AddJadeDbNamedConnections(
 
 ---
 
-#### Scenario B — Multiple connections, same DB type
+#### Scenario B — Multiple connections, same DB type (reading from appsettings)
 
-The same API works with identical database engines:
+```json
+// appsettings.json
+{
+  "ConnectionStrings": {
+    "PrimaryDb":   "Server=primary-db;Database=App;User Id=sa;Password=YOUR_PASSWORD;TrustServerCertificate=True;",
+    "SecondaryDb": "Server=secondary-db;Database=App;User Id=sa;Password=YOUR_PASSWORD;TrustServerCertificate=True;"
+  }
+}
+```
 
 ```csharp
+// Program.cs
+var config = builder.Configuration;
+
 builder.Services.AddJadeDbNamedConnections(c => c
-    .AddConnection("primary",   "MsSql", "Server=primary-db;Database=App;User Id=sa;Password=***;TrustServerCertificate=True;")
-    .AddConnection("secondary", "MsSql", "Server=secondary-db;Database=App;User Id=sa;Password=***;TrustServerCertificate=True;")
+    .AddConnection("primary",
+        "MsSql", config.GetConnectionString("PrimaryDb")   ?? throw new InvalidOperationException("Connection string 'PrimaryDb' not found."))
+    .AddConnection("secondary",
+        "MsSql", config.GetConnectionString("SecondaryDb") ?? throw new InvalidOperationException("Connection string 'SecondaryDb' not found."))
     .SetDefaultConnection("primary"));
 ```
 
 ---
 
-#### Full example — all options together
+#### Full example — all options together (reading from appsettings)
+
+```json
+// appsettings.json
+{
+  "ConnectionStrings": {
+    "MainDb":      "Server=main-db;Database=App;User Id=sa;Password=YOUR_PASSWORD;TrustServerCertificate=True;",
+    "ReportsDb":   "Host=reports-db;Database=Reports;Username=app;Password=YOUR_PASSWORD;",
+    "AnalyticsDb": "Server=analytics-db;Database=Analytics;User=app;Password=YOUR_PASSWORD;"
+  }
+}
+```
 
 ```csharp
+// Program.cs
+var config = builder.Configuration;
+
 builder.Services.AddJadeDbNamedConnections(
     configure: connections =>
     {
         connections
-            .AddConnection("main",      "MsSql",     "Server=main-db;Database=App;User Id=sa;Password=***;TrustServerCertificate=True;")
-            .AddConnection("reports",   "PostgreSQL", "Host=reports-db;Database=Reports;Username=app;Password=***;")
-            .AddConnection("analytics", "MySql",      "Server=analytics-db;Database=Analytics;User=app;Password=***;")
+            .AddConnection("main",
+                "MsSql",     config.GetConnectionString("MainDb")      ?? throw new InvalidOperationException("Connection string 'MainDb' not found."))
+            .AddConnection("reports",
+                "PostgreSQL", config.GetConnectionString("ReportsDb")   ?? throw new InvalidOperationException("Connection string 'ReportsDb' not found."))
+            .AddConnection("analytics",
+                "MySql",      config.GetConnectionString("AnalyticsDb") ?? throw new InvalidOperationException("Connection string 'AnalyticsDb' not found."))
             .SetDefaultConnection("main");
     },
     mapperConfigure: options =>
@@ -190,38 +278,6 @@ builder.Services.AddJadeDbNamedConnections(
         options.LogExecutedQuery = true;   // log executed SQL
     });
 ```
-
----
-
-#### Configuration-based setup (appsettings.json)
-
-Keep connection strings and the default name out of code entirely:
-
-```json
-{
-  "JadeDb": {
-    "DefaultConnection": "main",
-    "Connections": {
-      "main": {
-        "DatabaseType": "MsSql",
-        "ConnectionString": "Server=main-db;Database=App;User Id=sa;Password=***;TrustServerCertificate=True;"
-      },
-      "reports": {
-        "DatabaseType": "PostgreSQL",
-        "ConnectionString": "Host=reports-db;Database=Reports;Username=app;Password=***;"
-      }
-    }
-  }
-}
-```
-
-```csharp
-// Program.cs — no connection strings in code at all
-builder.Services.AddJadeDbNamedConnections(
-    serviceOptionsConfigure: options => options.EnableLogging = true);
-```
-
-Config and code can be combined; programmatic calls always win over config values with the same key.
 
 ---
 
