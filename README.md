@@ -107,6 +107,184 @@ builder.Services.AddJadeDbService(
 
 **Backward Compatibility:** Existing code without logging configuration continues to work without any changes.
 
+---
+
+### Multiple Database Connections
+
+If your application needs to connect to **more than one database** at the same time, use `AddJadeDbNamedConnections` instead of `AddJadeDbService`. Each connection is given a **name** so the right one can be resolved at runtime.
+
+`AddJadeDbNamedConnections` supports the same logging and mapper options as `AddJadeDbService`, plus the connection builder.
+
+**When to use each method:**
+
+| Scenario | Recommended method |
+|---|---|
+| Single database, one connection | `AddJadeDbService()` *(unchanged)* |
+| Multiple connections, different DB types | `AddJadeDbNamedConnections()` |
+| Multiple connections, same DB type | `AddJadeDbNamedConnections()` |
+
+---
+
+#### Scenario A — Multiple connections, different DB types
+
+Register each connection with a name, pick a default, and optionally configure logging:
+
+```csharp
+// Program.cs
+using JadeDbClient.Initialize;
+
+builder.Services.AddJadeDbNamedConnections(
+    configure: connections =>
+    {
+        connections
+            .AddConnection("main",    "MsSql",     "Server=main-db;Database=App;User Id=sa;Password=***;TrustServerCertificate=True;")
+            .AddConnection("reports", "PostgreSQL", "Host=reports-db;Database=Reports;Username=app;Password=***;")
+            .SetDefaultConnection("main");   // "main" becomes the default – see usage below
+    },
+    serviceOptionsConfigure: options =>
+    {
+        options.EnableLogging    = true;   // log query timing (default: false)
+        options.LogExecutedQuery = true;   // log executed SQL  (default: false)
+    });
+```
+
+---
+
+#### Scenario B — Multiple connections, same DB type
+
+The same API works with identical database engines:
+
+```csharp
+builder.Services.AddJadeDbNamedConnections(c => c
+    .AddConnection("primary",   "MsSql", "Server=primary-db;Database=App;User Id=sa;Password=***;TrustServerCertificate=True;")
+    .AddConnection("secondary", "MsSql", "Server=secondary-db;Database=App;User Id=sa;Password=***;TrustServerCertificate=True;")
+    .SetDefaultConnection("primary"));
+```
+
+---
+
+#### Full example — all options together
+
+```csharp
+builder.Services.AddJadeDbNamedConnections(
+    configure: connections =>
+    {
+        connections
+            .AddConnection("main",      "MsSql",     "Server=main-db;Database=App;User Id=sa;Password=***;TrustServerCertificate=True;")
+            .AddConnection("reports",   "PostgreSQL", "Host=reports-db;Database=Reports;Username=app;Password=***;")
+            .AddConnection("analytics", "MySql",      "Server=analytics-db;Database=Analytics;User=app;Password=***;")
+            .SetDefaultConnection("main");
+    },
+    mapperConfigure: options =>
+    {
+        // Only needed for third-party models you cannot decorate with [JadeDbObject]
+        options.RegisterMapper<ThirdPartyModel>(reader => new ThirdPartyModel
+        {
+            Id   = reader.GetInt32(reader.GetOrdinal("Id")),
+            Name = reader.GetString(reader.GetOrdinal("Name"))
+        });
+    },
+    serviceOptionsConfigure: options =>
+    {
+        options.EnableLogging    = true;   // log query timing
+        options.LogExecutedQuery = true;   // log executed SQL
+    });
+```
+
+---
+
+#### Configuration-based setup (appsettings.json)
+
+Keep connection strings and the default name out of code entirely:
+
+```json
+{
+  "JadeDb": {
+    "DefaultConnection": "main",
+    "Connections": {
+      "main": {
+        "DatabaseType": "MsSql",
+        "ConnectionString": "Server=main-db;Database=App;User Id=sa;Password=***;TrustServerCertificate=True;"
+      },
+      "reports": {
+        "DatabaseType": "PostgreSQL",
+        "ConnectionString": "Host=reports-db;Database=Reports;Username=app;Password=***;"
+      }
+    }
+  }
+}
+```
+
+```csharp
+// Program.cs — no connection strings in code at all
+builder.Services.AddJadeDbNamedConnections(
+    serviceOptionsConfigure: options => options.EnableLogging = true);
+```
+
+Config and code can be combined; programmatic calls always win over config values with the same key.
+
+---
+
+#### Using named connections
+
+**Inject the default connection directly — no factory, existing code unchanged:**
+
+```csharp
+using JadeDbClient.Interfaces;
+
+public class OrderService
+{
+    private readonly IDatabaseService _db;
+
+    // IDatabaseService resolves to the default connection ("main")
+    public OrderService(IDatabaseService db) => _db = db;
+
+    public async Task<IEnumerable<Order>> GetOrdersAsync()
+        => await _db.ExecuteQueryAsync<Order>("SELECT * FROM Orders");
+}
+```
+
+**Resolve any connection by name via `IJadeDbServiceFactory`:**
+
+```csharp
+using JadeDbClient.Interfaces;
+
+public class ReportService
+{
+    private readonly IDatabaseService _mainDb;
+    private readonly IDatabaseService _reportsDb;
+
+    public ReportService(IJadeDbServiceFactory dbFactory)
+    {
+        _mainDb    = dbFactory.GetService();          // returns the default ("main")
+        _reportsDb = dbFactory.GetService("reports"); // returns the "reports" connection
+    }
+
+    public async Task<IEnumerable<ReportSummary>> GetSummaryAsync()
+        => await _reportsDb.ExecuteQueryAsync<ReportSummary>("SELECT * FROM SalesSummary");
+}
+```
+
+**Using both in a single class:**
+
+```csharp
+public class SyncService
+{
+    private readonly IDatabaseService _main;
+    private readonly IDatabaseService _analytics;
+
+    public SyncService(IDatabaseService main, IJadeDbServiceFactory factory)
+    {
+        _main      = main;                              // the default, injected directly
+        _analytics = factory.GetService("analytics");  // a named connection
+    }
+}
+```
+
+> **Note:** `SetDefaultConnection` (and `JadeDb:DefaultConnection`) is **optional**. If you do not designate a default, `IDatabaseService` is **not** registered in DI and `factory.GetService()` *(no-arg)* will throw. Always resolve by name via `IJadeDbServiceFactory` in that case.
+
+---
+
 ### Advanced: AOT-Compatible Mappers with Source Generator
 
 > **✨ Recommended Approach** 🎉  

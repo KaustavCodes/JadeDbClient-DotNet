@@ -61,34 +61,59 @@ public static class JadeDbServiceRegistration
     /// Registers multiple named database connections and an <see cref="IJadeDbServiceFactory"/> that can resolve them by name.
     /// <para>
     /// Connections can be configured programmatically via <paramref name="configure"/>, or loaded automatically from
-    /// the <c>JadeDb:Connections</c> configuration section (see example below), or both.
-    /// Programmatic entries take precedence over configuration entries with the same name.
+    /// the <c>JadeDb:Connections</c> / <c>JadeDb:DefaultConnection</c> configuration keys, or both.
+    /// Programmatic entries and <see cref="JadeDbNamedConnectionsBuilder.SetDefaultConnection"/> always take
+    /// precedence over configuration values with the same name.
+    /// </para>
+    /// <para>
+    /// When a default connection is designated (via <see cref="JadeDbNamedConnectionsBuilder.SetDefaultConnection"/>
+    /// or the <c>JadeDb:DefaultConnection</c> config key), <see cref="Interfaces.IDatabaseService"/> is also
+    /// registered in the DI container so existing code that injects <see cref="Interfaces.IDatabaseService"/>
+    /// directly continues to work without modification.
     /// </para>
     /// <example>
-    /// appsettings.json:
+    /// Full example – Program.cs:
     /// <code>
+    /// builder.Services.AddJadeDbNamedConnections(
+    ///     configure: connections =>
+    ///     {
+    ///         connections
+    ///             .AddConnection("main",    "MsSql",     "Server=main-db;Database=App;User Id=sa;Password=***;TrustServerCertificate=True;")
+    ///             .AddConnection("reports", "PostgreSQL", "Host=reports-db;Database=Reports;Username=app;Password=***;")
+    ///             .AddConnection("cache",   "MySql",      "Server=cache-db;Database=Cache;User=app;Password=***;")
+    ///             .SetDefaultConnection("main");   // optional – makes "main" injectable as IDatabaseService
+    ///     },
+    ///     mapperConfigure: options =>
+    ///     {
+    ///         // Only needed for third-party models you cannot decorate with [JadeDbObject]
+    ///         options.RegisterMapper&lt;ThirdPartyModel&gt;(reader => new ThirdPartyModel
+    ///         {
+    ///             Id   = reader.GetInt32(reader.GetOrdinal("Id")),
+    ///             Name = reader.GetString(reader.GetOrdinal("Name"))
+    ///         });
+    ///     },
+    ///     serviceOptionsConfigure: options =>
+    ///     {
+    ///         options.EnableLogging    = true;   // log query timing (default: false)
+    ///         options.LogExecutedQuery = true;   // log executed SQL (default: false)
+    ///     });
+    /// </code>
+    /// Inject the default connection directly (no factory required):
+    /// <code>
+    /// public class OrderService(IDatabaseService db)  // receives the default ("main")
     /// {
-    ///   "JadeDb": {
-    ///     "Connections": {
-    ///       "default": { "DatabaseType": "MsSql",     "ConnectionString": "Server=localhost;..." },
-    ///       "reports": { "DatabaseType": "PostgreSQL", "ConnectionString": "Host=localhost;..."  }
-    ///     }
-    ///   }
+    ///     public Task&lt;IEnumerable&lt;Order&gt;&gt; GetOrdersAsync()
+    ///         => db.ExecuteQueryAsync&lt;Order&gt;("SELECT * FROM Orders");
     /// }
     /// </code>
-    /// Program.cs:
+    /// Resolve any named connection via the factory:
     /// <code>
-    /// services.AddJadeDbNamedConnections(connections =>
-    ///     connections.AddConnection("analytics", "MySql", "Server=localhost;..."));
-    /// </code>
-    /// Usage:
-    /// <code>
-    /// public class MyService(IJadeDbServiceFactory dbFactory)
+    /// public class ReportService(IJadeDbServiceFactory dbFactory)
     /// {
     ///     public async Task DoWork()
     ///     {
-    ///         var db      = dbFactory.GetService("default");
-    ///         var reports = dbFactory.GetService("reports");
+    ///         var main    = dbFactory.GetService();          // returns the default ("main")
+    ///         var reports = dbFactory.GetService("reports"); // returns the "reports" connection
     ///     }
     /// }
     /// </code>
