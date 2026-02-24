@@ -14,23 +14,35 @@ builder.Services.ConfigureHttpJsonOptions(options =>
 });
 
 // Register JadeDbService with AOT-compatible pre-compiled mappers and logging enabled
-builder.Services.AddJadeDbService(
-    options =>
-    {
-        // Register a pre-compiled mapper for DataModel (AOT-compatible)
-        // options.RegisterMapper<DataModel>(reader => new DataModel
-        // {
-        //     id = reader.GetInt32(reader.GetOrdinal("id")),
-        //     name = reader.IsDBNull(reader.GetOrdinal("name")) ? null : reader.GetString(reader.GetOrdinal("name"))
-        // });
+// builder.Services.AddJadeDbService(
+//     options =>
+//     {
+//         // Register a pre-compiled mapper for DataModel (AOT-compatible)
+//         // options.RegisterMapper<DataModel>(reader => new DataModel
+//         // {
+//         //     id = reader.GetInt32(reader.GetOrdinal("id")),
+//         //     name = reader.IsDBNull(reader.GetOrdinal("name")) ? null : reader.GetString(reader.GetOrdinal("name"))
+//         // });
 
-        // UserModel will use automatic reflection mapping (testing fallback)
-        // No mapper registered for UserModel - it will use reflection automatically
-    },
-    serviceOptions =>
+//         // UserModel will use automatic reflection mapping (testing fallback)
+//         // No mapper registered for UserModel - it will use reflection automatically
+//     },
+//     serviceOptions =>
+//     {
+//         serviceOptions.EnableLogging = true; // Enable logging for JadeDb
+//         serviceOptions.LogExecutedQuery = true;
+//     }
+// );
+
+builder.Services.AddJadeDbNamedConnections(
+    mapperConfigure: options =>
     {
-        serviceOptions.EnableLogging = true; // Enable logging for JadeDb
-        serviceOptions.LogExecutedQuery = true;
+        
+    },
+    serviceOptionsConfigure: options =>
+    {
+        options.EnableLogging    = true;   // log query timing (default: false)
+        options.LogExecutedQuery = true;   // log executed SQL  (default: false)
     }
 );
 
@@ -195,17 +207,6 @@ app.MapGet("/test-postgres", async (IDatabaseService dbConfig) =>
     dbDataParameters.Add(dbConfig.GetParameter("p_name", "PostgresUser", DbType.String, ParameterDirection.Input, 250));
     dbDataParameters.Add(dbConfig.GetParameter("p_outputparam", "test", DbType.String, ParameterDirection.Output, 250));
 
-    Dictionary<string, object> outputParameters = await dbConfig.ExecuteStoredProcedureWithOutputAsync("add_data", dbDataParameters);
-
-    foreach (var item in outputParameters)
-    {
-        Console.WriteLine($"{item.Key} : {item.Value}");
-    }
-
-    //Execute a stored procedure without output parameter
-    dbDataParameters = new List<IDbDataParameter>();
-    dbDataParameters.Add(dbConfig.GetParameter("p_name", "PostgresUser", DbType.String, ParameterDirection.Input, 250));
-    dbDataParameters.Add(dbConfig.GetParameter("p_outputparam", "test", DbType.String, ParameterDirection.Output, 250));
 
     await dbConfig.ExecuteStoredProcedureAsync("add_data", dbDataParameters);
 
@@ -215,6 +216,37 @@ app.MapGet("/test-postgres", async (IDatabaseService dbConfig) =>
     IEnumerable<DataModel> results = await dbConfig.ExecuteQueryAsync<DataModel>(query);
 
     return results;
+});
+
+app.MapGet("/test-postgres2", async (IJadeDbServiceFactory dbFactory) =>
+{
+    var mainDb    = dbFactory.GetService();    // or dbFactory.GetService() for the default
+    var reportsDb = dbFactory.GetService("reports");
+    //Execute a stored proceude with output parameter
+    List<IDbDataParameter> dbDataParameters1 = new List<IDbDataParameter>();
+
+    dbDataParameters1.Add(mainDb.GetParameter("p_name", "PostgresUser1", DbType.String, ParameterDirection.Input, 250));
+    dbDataParameters1.Add(mainDb.GetParameter("p_outputparam", "test", DbType.String, ParameterDirection.Output, 250));
+
+    Dictionary<string, object> outputParameters = await mainDb.ExecuteStoredProcedureWithOutputAsync("add_data", dbDataParameters1);
+
+    //Execute a query
+    string query = "SELECT * FROM public.tbl_test;";
+
+    IEnumerable<DataModel> results1 = await mainDb.ExecuteQueryAsync<DataModel>(query);
+
+
+    // Execute same for reportsDb to ensure multiple connections work
+    // First call: ExecuteStoredProcedureWithOutputAsync
+    List<IDbDataParameter> dbDataParameters2 = new List<IDbDataParameter>();
+    dbDataParameters2.Add(reportsDb.GetParameter("p_name", "PostgresUser2", DbType.String, ParameterDirection.Input, 250));
+    dbDataParameters2.Add(reportsDb.GetParameter("p_outputparam", "test", DbType.String, ParameterDirection.Output, 250));
+
+    outputParameters = await reportsDb.ExecuteStoredProcedureWithOutputAsync("add_data", dbDataParameters2);
+
+    IEnumerable<DataModel> results2 = await reportsDb.ExecuteQueryAsync<DataModel>(query);
+
+    return new MultipleDbResult(results1, results2);
 });
 
 app.MapGet("/test-mysql", async (IDatabaseService dbConfig) =>
@@ -752,6 +784,9 @@ public class QueryBuilderResponse
 
 // ── Showcase models ──────────────────────────────────────────────────────────
 
+
+public record MultipleDbResult(IEnumerable<DataModel> Orders, IEnumerable<DataModel> Customers);
+
 [JadeDbObject]
 [JadeDbTable("orders")]
 public partial class ShowcaseOrder
@@ -825,6 +860,7 @@ public class QueryShowcaseResponse
 [JsonSerializable(typeof(QueryShowcaseEntry))]
 [JsonSerializable(typeof(List<QueryShowcaseEntry>))]
 [JsonSerializable(typeof(QueryShowcaseResponse))]
+[JsonSerializable(typeof(MultipleDbResult))]
 internal partial class AppJsonSerializerContext : JsonSerializerContext
 {
 
