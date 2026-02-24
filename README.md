@@ -131,8 +131,9 @@ Define all your connections in `appsettings.json` under `JadeDb:Connections`. **
 
 Optionally set `JadeDb:DefaultConnection` to the name of whichever connection should be available for direct `IDatabaseService` injection.
 
+`appsettings.json` (placeholder values only — use real credentials via environment variables or a secrets manager):
+
 ```json
-// appsettings.json  ← placeholder values only — use real credentials via env vars or secrets
 {
   "JadeDb": {
     "DefaultConnection": "main",
@@ -173,8 +174,9 @@ Or use [.NET User Secrets](https://learn.microsoft.com/en-us/aspnet/core/securit
 
 #### Scenario A — Multiple connections, different DB types
 
+`appsettings.json`:
+
 ```json
-// appsettings.json
 {
   "JadeDb": {
     "DefaultConnection": "main",
@@ -210,8 +212,9 @@ builder.Services.AddJadeDbNamedConnections(
 
 #### Scenario B — Multiple connections, same DB type
 
+`appsettings.json`:
+
 ```json
-// appsettings.json
 {
   "JadeDb": {
     "DefaultConnection": "primary",
@@ -238,8 +241,9 @@ builder.Services.AddJadeDbNamedConnections();
 
 #### Full example — all options together
 
+`appsettings.json`:
+
 ```json
-// appsettings.json
 {
   "JadeDb": {
     "DefaultConnection": "main",
@@ -341,6 +345,152 @@ public class SyncService
 ```
 
 > **Note:** `JadeDb:DefaultConnection` is **optional**. If you do not set it, `IDatabaseService` is **not** registered in DI and `factory.GetService()` *(no-arg)* will throw. Always resolve by name via `IJadeDbServiceFactory` in that case.
+
+---
+
+#### Migrating existing code to use multiple connections
+
+If you already have working code that injects `IDatabaseService` directly, here is exactly how to adapt it for two (or more) named connections.
+
+**Step 1 — update `appsettings.json`**
+
+Replace the old single-connection keys with the `JadeDb:Connections` block. The key names become the names you use in code:
+
+```json
+{
+  "JadeDb": {
+    "DefaultConnection": "main",
+    "Connections": {
+      "main": {
+        "DatabaseType":   "PostgreSQL",
+        "ConnectionString": "Host=localhost;Database=jadedbtesting;Username=postgres;Password=YOUR_PASSWORD;"
+      },
+      "reports": {
+        "DatabaseType":   "PostgreSQL",
+        "ConnectionString": "Host=localhost;Database=jadedbtesting2;Username=postgres;Password=YOUR_PASSWORD;"
+      }
+    }
+  }
+}
+```
+
+**Step 2 — update `Program.cs`**
+
+```csharp
+// Before
+builder.Services.AddJadeDbService();
+
+// After
+builder.Services.AddJadeDbNamedConnections();
+```
+
+> **Backward compatibility:** Because `"main"` is set as `DefaultConnection`, all existing code that injects `IDatabaseService` directly continues to work without any modification — it will automatically receive the `"main"` connection.
+
+**Step 3 — update your endpoints / controllers**
+
+*Minimal API — using only the default connection (no change needed if `DefaultConnection` is set):*
+
+```csharp
+// Before — and still works after, because "main" is the default
+app.MapGet("/test-postgres", async (IDatabaseService dbConfig) =>
+{
+    var dbDataParameters = new List<IDbDataParameter>();
+    dbDataParameters.Add(dbConfig.GetParameter("p_name",        "PostgresUser", DbType.String, ParameterDirection.Input,  250));
+    dbDataParameters.Add(dbConfig.GetParameter("p_outputparam", "test",         DbType.String, ParameterDirection.Output, 250));
+
+    Dictionary<string, object> outputParameters =
+        await dbConfig.ExecuteStoredProcedureWithOutputAsync("your_stored_procedure", dbDataParameters);
+
+    return Results.Ok(outputParameters);
+});
+```
+
+*Minimal API — using a specific named connection:*
+
+```csharp
+// Inject IJadeDbServiceFactory instead, then resolve the connection you need by name
+app.MapGet("/test-reports", async (IJadeDbServiceFactory dbFactory) =>
+{
+    var dbConfig = dbFactory.GetService("reports"); // resolves the "reports" connection
+
+    var dbDataParameters = new List<IDbDataParameter>();
+    dbDataParameters.Add(dbConfig.GetParameter("p_name",        "ReportsUser", DbType.String, ParameterDirection.Input,  250));
+    dbDataParameters.Add(dbConfig.GetParameter("p_outputparam", "test",        DbType.String, ParameterDirection.Output, 250));
+
+    Dictionary<string, object> outputParameters =
+        await dbConfig.ExecuteStoredProcedureWithOutputAsync("your_stored_procedure", dbDataParameters);
+
+    return Results.Ok(outputParameters);
+});
+```
+
+*Minimal API — using both connections in one handler:*
+
+```csharp
+app.MapGet("/test-both", async (IJadeDbServiceFactory dbFactory) =>
+{
+    var mainDb    = dbFactory.GetService("main");    // or dbFactory.GetService() for the default
+    var reportsDb = dbFactory.GetService("reports");
+
+    // Use mainDb for the primary database
+    var mainParams = new List<IDbDataParameter>
+    {
+        mainDb.GetParameter("p_name", "MainUser", DbType.String, ParameterDirection.Input, 250)
+    };
+    var mainResults = await mainDb.ExecuteQueryAsync<MyModel>("SELECT * FROM my_table", mainParams);
+
+    // Use reportsDb for the reports database
+    var reportParams = new List<IDbDataParameter>
+    {
+        reportsDb.GetParameter("p_name", "ReportUser", DbType.String, ParameterDirection.Input, 250)
+    };
+    var reportResults = await reportsDb.ExecuteQueryAsync<ReportModel>("SELECT * FROM report_table", reportParams);
+
+    return Results.Ok(new { main = mainResults, reports = reportResults });
+});
+```
+
+*Controller — same pattern via constructor injection:*
+
+```csharp
+using JadeDbClient.Interfaces;
+
+public class TestController : ControllerBase
+{
+    private readonly IDatabaseService _main;      // injected directly — the default connection
+    private readonly IDatabaseService _reports;   // resolved from the factory by name
+
+    public TestController(IDatabaseService main, IJadeDbServiceFactory dbFactory)
+    {
+        _main    = main;
+        _reports = dbFactory.GetService("reports");
+    }
+
+    [HttpGet("test-postgres")]
+    public async Task<IActionResult> TestPostgres()
+    {
+        var dbDataParameters = new List<IDbDataParameter>();
+        dbDataParameters.Add(_main.GetParameter("p_name",        "PostgresUser", DbType.String, ParameterDirection.Input,  250));
+        dbDataParameters.Add(_main.GetParameter("p_outputparam", "test",         DbType.String, ParameterDirection.Output, 250));
+
+        var outputParameters = await _main.ExecuteStoredProcedureWithOutputAsync("your_stored_procedure", dbDataParameters);
+        return Ok(outputParameters);
+    }
+
+    [HttpGet("test-reports")]
+    public async Task<IActionResult> TestReports()
+    {
+        var dbDataParameters = new List<IDbDataParameter>();
+        dbDataParameters.Add(_reports.GetParameter("p_name",        "ReportsUser", DbType.String, ParameterDirection.Input,  250));
+        dbDataParameters.Add(_reports.GetParameter("p_outputparam", "test",        DbType.String, ParameterDirection.Output, 250));
+
+        var outputParameters = await _reports.ExecuteStoredProcedureWithOutputAsync("your_stored_procedure", dbDataParameters);
+        return Ok(outputParameters);
+    }
+}
+```
+
+> **Summary:** The only change to existing endpoint/controller code is the injection point. Replace `IDatabaseService dbConfig` with `IJadeDbServiceFactory dbFactory`, then call `dbFactory.GetService("connectionName")` to get the service for the database you need. Everything else — `GetParameter`, `ExecuteQueryAsync`, `ExecuteStoredProcedureWithOutputAsync`, etc. — stays exactly the same.
 
 ---
 
