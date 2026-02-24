@@ -5,9 +5,9 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <PackageId>JadeDbClient</PackageId>
-    <Version>1.5.0</Version> 
+    <Version>1.5.1</Version> 
     <Authors>KausCoder</Authors>
-    <Description>Simplified ADO.NET-style access for SQL Server, MySQL, PostgreSQL. Unified API, parameterized queries, fluent builder, dialect-aware paging and identity handling.</Description>
+    <Description>Simplified ADO.NET-style access for SQL Server, MySQL, PostgreSQL. Unified API, parameterized queries, fluent builder, dialect-aware paging and identity handling, multiple connection support.</Description>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <PackageReadmeFile>README.md</PackageReadmeFile>
     <RepositoryUrl>https://github.com/KaustavCodes/JadeDbClient-DotNet</RepositoryUrl>
