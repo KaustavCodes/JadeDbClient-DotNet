@@ -14,23 +14,35 @@ builder.Services.ConfigureHttpJsonOptions(options =>
 });
 
 // Register JadeDbService with AOT-compatible pre-compiled mappers and logging enabled
-builder.Services.AddJadeDbService(
-    options =>
-    {
-        // Register a pre-compiled mapper for DataModel (AOT-compatible)
-        // options.RegisterMapper<DataModel>(reader => new DataModel
-        // {
-        //     id = reader.GetInt32(reader.GetOrdinal("id")),
-        //     name = reader.IsDBNull(reader.GetOrdinal("name")) ? null : reader.GetString(reader.GetOrdinal("name"))
-        // });
+// builder.Services.AddJadeDbService(
+//     options =>
+//     {
+//         // Register a pre-compiled mapper for DataModel (AOT-compatible)
+//         // options.RegisterMapper<DataModel>(reader => new DataModel
+//         // {
+//         //     id = reader.GetInt32(reader.GetOrdinal("id")),
+//         //     name = reader.IsDBNull(reader.GetOrdinal("name")) ? null : reader.GetString(reader.GetOrdinal("name"))
+//         // });
 
-        // UserModel will use automatic reflection mapping (testing fallback)
-        // No mapper registered for UserModel - it will use reflection automatically
-    },
-    serviceOptions =>
+//         // UserModel will use automatic reflection mapping (testing fallback)
+//         // No mapper registered for UserModel - it will use reflection automatically
+//     },
+//     serviceOptions =>
+//     {
+//         serviceOptions.EnableLogging = true; // Enable logging for JadeDb
+//         serviceOptions.LogExecutedQuery = true;
+//     }
+// );
+
+builder.Services.AddJadeDbNamedConnections(
+    mapperConfigure: options =>
     {
-        serviceOptions.EnableLogging = true; // Enable logging for JadeDb
-        serviceOptions.LogExecutedQuery = true;
+        
+    },
+    serviceOptionsConfigure: options =>
+    {
+        options.EnableLogging    = true;   // log query timing (default: false)
+        options.LogExecutedQuery = true;   // log executed SQL  (default: false)
     }
 );
 
