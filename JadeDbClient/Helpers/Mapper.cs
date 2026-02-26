@@ -74,7 +74,15 @@ internal class Mapper
             var columnName = reader.GetName(i);
             if (propertyDict.TryGetValue(columnName, out var property) && !reader.IsDBNull(i))
             {
-                property.SetValue(instance, reader[i]);
+                var value = reader[i];
+                var propType = Nullable.GetUnderlyingType(property.PropertyType) ?? property.PropertyType;
+
+                if (value is DateTime dt && propType == typeof(DateOnly))
+                    property.SetValue(instance, DateOnly.FromDateTime(dt));
+                else if (value is DateOnly dateOnly && propType == typeof(DateTime))
+                    property.SetValue(instance, dateOnly.ToDateTime(TimeOnly.MinValue));
+                else
+                    property.SetValue(instance, value);
             }
         }
         return instance;
