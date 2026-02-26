@@ -166,6 +166,9 @@ namespace JadeDbClient.SourceGenerator
                     "global::System.Single" => $"reader.GetFloat({ord})",
                     "global::System.String" => $"reader.GetString({ord})",
 
+                    // New: DateOnly (convert from DateTime returned by most DB providers)
+                    "global::System.DateOnly" => $"global::System.DateOnly.FromDateTime(reader.GetDateTime({ord}))",
+
                     // New: DateTimeOffset
                     "global::System.DateTimeOffset" => $"reader.GetDateTimeOffset({ord})",
 
