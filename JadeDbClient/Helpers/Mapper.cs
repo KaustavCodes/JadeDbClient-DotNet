@@ -1,6 +1,8 @@
 using System;
+using System.Collections.Generic;
 using System.Data;
 using System.Diagnostics.CodeAnalysis;
+using System.Dynamic;
 using JadeDbClient.Initialize;
 using JadeDbClient.Attributes;
 
@@ -86,6 +88,24 @@ internal class Mapper
             }
         }
         return instance;
+    }
+
+    /// <summary>
+    /// Maps a data reader row to a <see cref="dynamic"/> object (<see cref="ExpandoObject"/>).
+    /// Each column in the reader becomes a property on the returned object, using the
+    /// column name as the key.  <see cref="DBNull"/> values are mapped to <c>null</c>.
+    /// This is the preferred mapping strategy for JOIN queries whose result set spans
+    /// multiple tables and does not correspond to any single strongly-typed model.
+    /// </summary>
+    internal dynamic MapDynamic(IDataReader reader)
+    {
+        IDictionary<string, object?> expando = new ExpandoObject();
+        for (int i = 0; i < reader.FieldCount; i++)
+        {
+            var columnName = reader.GetName(i);
+            expando[columnName] = reader.IsDBNull(i) ? null : reader.GetValue(i);
+        }
+        return (ExpandoObject)expando;
     }
 
     /// <summary>

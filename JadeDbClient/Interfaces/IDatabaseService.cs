@@ -35,6 +35,17 @@ public interface IDatabaseService
     Task<IEnumerable<T>> ExecuteQueryAsync<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicProperties | DynamicallyAccessedMemberTypes.PublicParameterlessConstructor)] T>(string query, IEnumerable<IDbDataParameter>? parameters = null);
 
     /// <summary>
+    /// Executes a SQL query asynchronously and maps each result row to a <see langword="dynamic"/>
+    /// object whose properties correspond to the column names returned by the query.
+    /// Use this overload when the query spans multiple tables (e.g. via JOINs) and the
+    /// result set does not correspond to a single strongly-typed model.
+    /// </summary>
+    /// <param name="query">The SQL query to be executed.</param>
+    /// <param name="parameters">A collection of parameters to be used in the SQL query. Default is null.</param>
+    /// <returns>A task whose result is a collection of <see langword="dynamic"/> objects, one per row.</returns>
+    Task<IEnumerable<dynamic>> ExecuteQueryDynamicAsync(string query, IEnumerable<IDbDataParameter>? parameters = null);
+
+    /// <summary>
     /// Executes a SQL query asynchronously and returns the first result object of type T.
     /// </summary>
     /// <typeparam name="T">The type of objects to which the query results will be mapped. The type T should have properties that match the column names in the query result.</typeparam>
@@ -45,6 +56,18 @@ public interface IDatabaseService
     /// <exception cref="InvalidOperationException">Thrown when there is an error creating an instance of type T.</exception>
     /// <exception cref="ArgumentException">Thrown when there is an error setting a property value.</exception>
     Task<T?> ExecuteQueryFirstRowAsync<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicProperties | DynamicallyAccessedMemberTypes.PublicParameterlessConstructor)] T>(string query, IEnumerable<IDbDataParameter>? parameters = null);
+
+    /// <summary>
+    /// Executes a SQL query asynchronously and maps the first result row to a
+    /// <see langword="dynamic"/> object whose properties correspond to the column names.
+    /// Returns <c>null</c> when the query returns no rows.
+    /// Use this overload when the result set spans multiple tables and does not map to a
+    /// single strongly-typed model.
+    /// </summary>
+    /// <param name="query">The SQL query to be executed.</param>
+    /// <param name="parameters">A collection of parameters to be used in the SQL query. Default is null.</param>
+    /// <returns>A task whose result is a <see langword="dynamic"/> object for the first row, or <c>null</c>.</returns>
+    Task<dynamic?> ExecuteQueryFirstRowDynamicAsync(string query, IEnumerable<IDbDataParameter>? parameters = null);
 
     /// <summary>
     /// Executes a query and returns a single value (scalar) result.
