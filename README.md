@@ -1396,7 +1396,18 @@ public class Category
     public string Name { get; set; } = string.Empty;
 }
 
-// INNER JOIN (default)
+[JadeDbTable("orders")]
+public class Order
+{
+    public int Id { get; set; }
+
+    [JadeDbColumn("customer_id")]
+    public int CustomerId { get; set; }
+
+    public decimal Total { get; set; }
+}
+
+// INNER JOIN (default) – SELECT only columns from the main table
 var (sql, parameters) = new QueryBuilder<Product>(_dbService)
     .Join<Category>((product, category) => product.CategoryId == category.Id)
     .Select(p => new { p.Name, p.Price })
@@ -1414,22 +1425,78 @@ var (sql, parameters) = new QueryBuilder<Product>(_dbService)
     .LeftJoin<Category>((p, c) => p.CategoryId == c.Id)
     .BuildSelect();
 
-// Multiple joins
-var (sql, parameters) = new QueryBuilder<Product>(_dbService)
-    .Join<Category>((p, c) => p.CategoryId == c.Id)
-    .LeftJoin<Order>((p, o) => p.Id == o.Id)
-    .BuildSelect();
-
 // Compound ON condition
 var (sql, parameters) = new QueryBuilder<Product>(_dbService)
     .Join<Category>((p, c) => p.CategoryId == c.Id && p.Price > 0m)
     .BuildSelect();
+```
 
-// Selecting columns from both tables (use raw-string Select when you need joined columns)
+#### Selecting columns from joined tables
+
+There are three ways to include columns from joined tables in the SELECT list, depending on how many joins you have.
+
+**Option 1 — type-safe two-parameter expression (one join)**
+
+Use `Select<TJoin, TResult>` with a two-parameter lambda when you have a single join. Each column reference is automatically qualified with its correct table name, and `[JadeDbColumn]` attributes are respected.
+
+```csharp
+var (sql, parameters) = new QueryBuilder<Product>(_dbService)
+    .Join<Category>((p, c) => p.CategoryId == c.Id)
+    .Select((Product p, Category c) => new { ProductName = p.Name, CategoryName = c.Name })
+    .Where(p => p.Price > 10m)
+    .BuildSelect();
+// → SELECT products.product_name, categories.category_name
+//   FROM products
+//   INNER JOIN categories ON (products.category_id = categories.Id)
+//   WHERE (products.Price > @p0)
+
+// Single column from the joined table
+var (sql, parameters) = new QueryBuilder<Product>(_dbService)
+    .Join<Category>((p, c) => p.CategoryId == c.Id)
+    .Select((Product p, Category c) => c.Name)
+    .BuildSelect();
+// → SELECT categories.category_name FROM products INNER JOIN categories ON …
+```
+
+> **Note:** Because C# anonymous types cannot have two properties with the same name, use named properties when both tables share a property name (e.g., `new { ProductName = p.Name, CategoryName = c.Name }`).
+
+**Option 2 — `SelectColumns` fluent builder (one or more joins)**
+
+Use `SelectColumns(cols => cols.From<TTable>(…)…)` when you have multiple joins or want a more explicit, readable selection across many tables. Chain as many `.From<TTable>()` calls as needed — each one appends one or more columns from that table.
+
+```csharp
+var (sql, parameters) = new QueryBuilder<Product>(_dbService)
+    .Join<Category>((p, c) => p.CategoryId == c.Id)
+    .LeftJoin<Order>((p, o) => p.Id == o.Id)
+    .SelectColumns(cols => cols
+        .From<Product>(p => new { p.Name, p.Price })   // two columns from products
+        .From<Category>(c => c.Name)                   // one column from categories
+        .From<Order>(o => o.Total))                    // one column from orders
+    .Where(p => p.Price > 10m)
+    .BuildSelect();
+// → SELECT products.product_name, products.Price, categories.category_name, orders.Total
+//   FROM products
+//   INNER JOIN categories ON (products.category_id = categories.Id)
+//   LEFT JOIN orders ON (products.Id = orders.Id)
+//   WHERE (products.Price > @p0)
+```
+
+Each `.From<TTable>()` call supports:
+- A single property: `.From<Category>(c => c.Name)`
+- An anonymous-type projection: `.From<Product>(p => new { p.Name, p.Price })`
+
+Column names are always resolved via `[JadeDbColumn]` when present.
+
+**Option 3 — raw-string `Select` (full manual control)**
+
+Pass pre-qualified column strings directly. All validation rules for safe SQL identifiers still apply; no automatic qualification is performed.
+
+```csharp
 var (sql, parameters) = new QueryBuilder<Product>(_dbService)
     .Join<Category>((p, c) => p.CategoryId == c.Id)
     .Select("products.product_name", "categories.category_name")
     .BuildSelect();
+// → SELECT products.product_name, categories.category_name FROM products INNER JOIN …
 ```
 
 ### INSERT
@@ -1503,7 +1570,7 @@ var (sql, parameters) = new QueryBuilder<Product>(_dbService)
 3. **Pagination on SQL Server requires ORDER BY** — calling `Skip`/`Take` without at least one `OrderBy` throws `InvalidOperationException`.
 4. **UPDATE and DELETE require a WHERE clause** — omitting `.Where(…)` before `BuildUpdate` / `BuildDelete` throws `InvalidOperationException` to prevent accidental full-table modifications.
 5. **`Id` property exclusion** — `BuildInsert` and `BuildUpdate` currently skip any property named exactly `Id`. If your primary key has a different name, map it with `[JadeDbColumn]` or exclude it manually.
-6. **JOIN result mapping** — `BuildSelect()` only returns the SQL and its parameters; mapping rows from a JOIN result set (which spans multiple types) must be done manually or via `ExecuteQueryAsync<T>` with a custom mapper.
+6. **JOIN result mapping** — `BuildSelect()` returns the SQL and its parameters; mapping a JOIN result set that spans multiple types must be done manually or via `ExecuteQueryAsync<T>` with a custom mapper. Use `Select<TJoin, TResult>` or `SelectColumns` (see above) to control which columns appear in the result set.
 7. **Complex expressions are not yet supported** — only simple member access, binary comparisons, string methods (`Contains`, `StartsWith`, `EndsWith`), and the `In` extension are translated. Unsupported expressions throw `NotSupportedException`.
 
 ---
