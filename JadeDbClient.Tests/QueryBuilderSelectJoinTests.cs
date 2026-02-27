@@ -351,4 +351,232 @@ public class QueryBuilderSelectJoinTests
 
         sql.Should().Contain("ORDER BY products.product_name ASC");
     }
+
+    // ════════════════════════════════════════════════════════════════════════
+    // 10. JOIN – two-parameter Select expression (cross-table column selection)
+    // ════════════════════════════════════════════════════════════════════════
+
+    [Fact]
+    public void Join_TwoParamSelect_AnonymousProjection_IncludesColumnsFromBothTables()
+    {
+        var qb = new QueryBuilder<Product>(CreateMockService().Object);
+
+        var (sql, _) = qb
+            .Join<Category>((p, c) => p.CategoryId == c.Id)
+            .Select((Product p, Category c) => new { ProductName = p.Name, CategoryName = c.Name })
+            .BuildSelect();
+
+        sql.Should().Contain("products.product_name");
+        sql.Should().Contain("categories.category_name");
+        // Should not include other columns
+        sql.Should().NotContain("Price");
+    }
+
+    [Fact]
+    public void Join_TwoParamSelect_SingleColumnFromJoinedTable_IsQualified()
+    {
+        var qb = new QueryBuilder<Product>(CreateMockService().Object);
+
+        var (sql, _) = qb
+            .Join<Category>((p, c) => p.CategoryId == c.Id)
+            .Select((Product p, Category c) => c.Name)
+            .BuildSelect();
+
+        sql.Should().StartWith("SELECT categories.category_name");
+        // The SELECT list should not include main-table columns
+        sql.Should().NotContain("products.product_name");
+        sql.Should().NotContain("products.Price");
+    }
+
+    [Fact]
+    public void Join_TwoParamSelect_SingleColumnFromMainTable_IsQualified()
+    {
+        var qb = new QueryBuilder<Product>(CreateMockService().Object);
+
+        var (sql, _) = qb
+            .Join<Category>((p, c) => p.CategoryId == c.Id)
+            .Select((Product p, Category c) => p.Price)
+            .BuildSelect();
+
+        sql.Should().StartWith("SELECT products.Price");
+        // The SELECT list should not include joined-table columns
+        sql.Should().NotContain("categories.category_name");
+    }
+
+    [Fact]
+    public void Join_TwoParamSelect_RespectsJadeDbColumnAttribute()
+    {
+        var qb = new QueryBuilder<Product>(CreateMockService().Object);
+
+        var (sql, _) = qb
+            .Join<Category>((p, c) => p.CategoryId == c.Id)
+            .Select((Product p, Category c) => new { p.CategoryId, c.Name })
+            .BuildSelect();
+
+        // CategoryId has [JadeDbColumn("category_id")]
+        sql.Should().Contain("products.category_id");
+        // Category.Name has [JadeDbColumn("category_name")]
+        sql.Should().Contain("categories.category_name");
+    }
+
+    [Fact]
+    public void Join_TwoParamSelect_WithWhereClause_GeneratesCorrectSql()
+    {
+        var qb = new QueryBuilder<Product>(CreateMockService().Object);
+
+        var (sql, _) = qb
+            .Join<Category>((p, c) => p.CategoryId == c.Id)
+            .Select((Product p, Category c) => new { ProductName = p.Name, CategoryName = c.Name })
+            .Where(p => p.Price > 10m)
+            .BuildSelect();
+
+        sql.Should().Contain("products.product_name");
+        sql.Should().Contain("categories.category_name");
+        sql.Should().Contain("WHERE (products.Price > @p0)");
+    }
+
+    [Fact]
+    public void Join_TwoParamSelect_WithInvalidExpression_ThrowsArgumentException()
+    {
+        var qb = new QueryBuilder<Product>(CreateMockService().Object);
+
+        var act = () => qb
+            .Join<Category>((p, c) => p.CategoryId == c.Id)
+            .Select((Product p, Category c) => new { Complex = p.Name + "!" });
+
+        act.Should().Throw<ArgumentException>();
+    }
+
+    [Fact]
+    public void Join_TwoParamSelect_DoesNotDoubleQualifyColumns()
+    {
+        var qb = new QueryBuilder<Product>(CreateMockService().Object);
+
+        var (sql, _) = qb
+            .Join<Category>((p, c) => p.CategoryId == c.Id)
+            .Select((Product p, Category c) => new { ProductName = p.Name, CategoryName = c.Name })
+            .BuildSelect();
+
+        // Should not have "products.products." or "categories.categories."
+        sql.Should().NotContain("products.products.");
+        sql.Should().NotContain("categories.categories.");
+    }
+
+    // ════════════════════════════════════════════════════════════════════════
+    // 11. SelectColumns – fluent multi-table column selector
+    // ════════════════════════════════════════════════════════════════════════
+
+    [Fact]
+    public void SelectColumns_TwoJoins_IncludesColumnsFromAllThreeTables()
+    {
+        var qb = new QueryBuilder<Product>(CreateMockService().Object);
+
+        var (sql, _) = qb
+            .Join<Category>((p, c) => p.CategoryId == c.Id)
+            .LeftJoin<Order>((p, o) => p.Id == o.Id)
+            .SelectColumns(cols => cols
+                .From<Product>(p => p.Name)
+                .From<Category>(c => c.Name)
+                .From<Order>(o => o.Total))
+            .BuildSelect();
+
+        sql.Should().Contain("products.product_name");
+        sql.Should().Contain("categories.category_name");
+        sql.Should().Contain("orders.Total");
+        sql.Should().Contain("INNER JOIN categories ON");
+        sql.Should().Contain("LEFT JOIN orders ON");
+    }
+
+    [Fact]
+    public void SelectColumns_AnonymousProjection_IncludesMultipleColumnsFromOneTable()
+    {
+        var qb = new QueryBuilder<Product>(CreateMockService().Object);
+
+        var (sql, _) = qb
+            .Join<Category>((p, c) => p.CategoryId == c.Id)
+            .SelectColumns(cols => cols
+                .From<Product>(p => new { p.Name, p.Price })
+                .From<Category>(c => c.Name))
+            .BuildSelect();
+
+        sql.Should().Contain("products.product_name");
+        sql.Should().Contain("products.Price");
+        sql.Should().Contain("categories.category_name");
+    }
+
+    [Fact]
+    public void SelectColumns_RespectsJadeDbColumnAttribute()
+    {
+        var qb = new QueryBuilder<Product>(CreateMockService().Object);
+
+        var (sql, _) = qb
+            .Join<Category>((p, c) => p.CategoryId == c.Id)
+            .SelectColumns(cols => cols
+                .From<Product>(p => new { p.CategoryId, p.Name })
+                .From<Category>(c => c.Name))
+            .BuildSelect();
+
+        sql.Should().Contain("products.category_id");
+        sql.Should().Contain("products.product_name");
+        sql.Should().Contain("categories.category_name");
+    }
+
+    [Fact]
+    public void SelectColumns_WithWhereClause_GeneratesCorrectSql()
+    {
+        var qb = new QueryBuilder<Product>(CreateMockService().Object);
+
+        var (sql, _) = qb
+            .Join<Category>((p, c) => p.CategoryId == c.Id)
+            .SelectColumns(cols => cols
+                .From<Product>(p => p.Name)
+                .From<Category>(c => c.Name))
+            .Where(p => p.Price > 20m)
+            .BuildSelect();
+
+        sql.Should().Contain("products.product_name");
+        sql.Should().Contain("categories.category_name");
+        sql.Should().Contain("WHERE (products.Price > @p0)");
+    }
+
+    [Fact]
+    public void SelectColumns_DoesNotDoubleQualifyColumns()
+    {
+        var qb = new QueryBuilder<Product>(CreateMockService().Object);
+
+        var (sql, _) = qb
+            .Join<Category>((p, c) => p.CategoryId == c.Id)
+            .SelectColumns(cols => cols
+                .From<Product>(p => p.Name)
+                .From<Category>(c => c.Name))
+            .BuildSelect();
+
+        sql.Should().NotContain("products.products.");
+        sql.Should().NotContain("categories.categories.");
+    }
+
+    [Fact]
+    public void SelectColumns_WithInvalidExpression_ThrowsArgumentException()
+    {
+        var qb = new QueryBuilder<Product>(CreateMockService().Object);
+
+        var act = () => qb
+            .Join<Category>((p, c) => p.CategoryId == c.Id)
+            .SelectColumns(cols => cols
+                .From<Product>(p => new { Complex = p.Name + "!" }));
+
+        act.Should().Throw<ArgumentException>();
+    }
+
+    [Fact]
+    public void SelectColumns_WithEmptySelector_ThrowsArgumentException()
+    {
+        var qb = new QueryBuilder<Product>(CreateMockService().Object);
+
+        var act = () => qb
+            .Join<Category>((p, c) => p.CategoryId == c.Id)
+            .SelectColumns(cols => { /* no From() calls */ });
+
+        act.Should().Throw<ArgumentException>();
+    }
 }

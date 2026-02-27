@@ -193,6 +193,69 @@ public class MsSqlDbService : IDatabaseService
         return default;
     }
 
+    /// <inheritdoc/>
+    public async Task<IEnumerable<dynamic>> ExecuteQueryDynamicAsync(string query, IEnumerable<IDbDataParameter>? parameters = null)
+    {
+        var results = new List<dynamic>();
+
+        using (var connection = new SqlConnection(_connectionString))
+        {
+            await connection.OpenAsync();
+            long startTimestamp = _serviceOptions.EnableLogging ? Stopwatch.GetTimestamp() : 0;
+            using (var command = new SqlCommand(query, connection))
+            {
+                if (parameters != null)
+                {
+                    foreach (var parameter in parameters)
+                        command.Parameters.Add(parameter);
+                }
+
+                using (var reader = await command.ExecuteReaderAsync())
+                {
+                    while (reader.Read())
+                        results.Add(_mapper.MapDynamic(reader));
+                }
+            }
+            if (_serviceOptions.EnableLogging)
+                LogQueryExecution(query, (long)Stopwatch.GetElapsedTime(startTimestamp).TotalMilliseconds);
+        }
+
+        return results;
+    }
+
+    /// <inheritdoc/>
+    public async Task<dynamic?> ExecuteQueryFirstRowDynamicAsync(string query, IEnumerable<IDbDataParameter>? parameters = null)
+    {
+        using (var connection = new SqlConnection(_connectionString))
+        {
+            await connection.OpenAsync();
+            long startTimestamp = _serviceOptions.EnableLogging ? Stopwatch.GetTimestamp() : 0;
+            using (var command = new SqlCommand(query, connection))
+            {
+                if (parameters != null)
+                {
+                    foreach (var parameter in parameters)
+                        command.Parameters.Add(parameter);
+                }
+
+                using (var reader = await command.ExecuteReaderAsync())
+                {
+                    if (reader.Read())
+                    {
+                        var result = _mapper.MapDynamic(reader);
+                        if (_serviceOptions.EnableLogging)
+                            LogQueryExecution(query, (long)Stopwatch.GetElapsedTime(startTimestamp).TotalMilliseconds);
+                        return result;
+                    }
+                }
+            }
+            if (_serviceOptions.EnableLogging)
+                LogQueryExecution(query, (long)Stopwatch.GetElapsedTime(startTimestamp).TotalMilliseconds);
+        }
+
+        return null;
+    }
+
     /// <summary>
     /// Executes a query and returns a single value (scalar) result.
     /// </summary>

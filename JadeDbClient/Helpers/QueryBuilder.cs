@@ -1,11 +1,13 @@
 using System;
 using System.Collections.Generic;
 using System.Data;
+using System.Diagnostics.CodeAnalysis;
 using System.Linq;
 using System.Linq.Expressions;
 using System.Reflection;
 using System.Text;
 using System.Text.RegularExpressions;
+using System.Threading.Tasks;
 using JadeDbClient.Interfaces;
 using JadeDbClient.Enums;
 using JadeDbClient.Helpers;
@@ -64,6 +66,66 @@ public class QueryBuilder<T> where T : class
     {
         _selectColumns = ExtractColumnsFromSelector(selector);
         _selectColumnsNeedQualification = true;
+        return this;
+    }
+
+    /// <summary>
+    /// Selects specific columns from the main table and one joined table using a
+    /// type-safe two-parameter expression.  Each column reference is automatically
+    /// qualified with its respective table name.
+    /// <para>
+    /// Example: <c>.Select((p, c) =&gt; new { p.Name, c.CategoryName })</c>
+    /// </para>
+    /// Column names are resolved via <see cref="JadeDbColumnAttribute"/> when present.
+    /// </summary>
+    /// <typeparam name="TJoin">The type of the joined table.</typeparam>
+    /// <typeparam name="TResult">The anonymous or concrete result type of the projection.</typeparam>
+    /// <param name="selector">A two-parameter lambda projecting columns from both tables.</param>
+    public QueryBuilder<T> Select<TJoin, TResult>(Expression<Func<T, TJoin, TResult>> selector)
+        where TJoin : class
+    {
+        if (selector == null) throw new ArgumentNullException(nameof(selector));
+
+        var joinTableName = ReflectionHelper.GetTableName(typeof(TJoin), _dbService.PluralizeTableNames);
+        _selectColumns = ExtractColumnsFromJoinSelector(selector, _tableName, joinTableName);
+        // Columns are already fully qualified (table.column) – no further qualification needed.
+        _selectColumnsNeedQualification = false;
+        return this;
+    }
+
+    /// <summary>
+    /// Selects columns from the main table and any number of joined tables using a fluent
+    /// <see cref="JoinColumnSelector"/> builder.  Each <c>.From&lt;TTable&gt;()</c> call appends
+    /// one or more fully-qualified <c>table.column</c> references to the SELECT list.
+    /// <para>
+    /// This overload is the recommended choice when more than one JOIN is present.
+    /// </para>
+    /// <para>
+    /// Example:
+    /// <code>
+    /// qb.Join&lt;Category&gt;(...)
+    ///   .Join&lt;Order&gt;(...)
+    ///   .SelectColumns(cols =&gt; cols
+    ///       .From&lt;Product&gt;(p =&gt; new { p.Name, p.Price })
+    ///       .From&lt;Category&gt;(c =&gt; c.Name)
+    ///       .From&lt;Order&gt;(o =&gt; o.Total))
+    ///   .BuildSelect();
+    /// </code>
+    /// </para>
+    /// </summary>
+    public QueryBuilder<T> SelectColumns(Action<JoinColumnSelector> configure)
+    {
+        if (configure == null) throw new ArgumentNullException(nameof(configure));
+
+        var selector = new JoinColumnSelector(_dbService);
+        configure(selector);
+
+        if (selector.Columns.Count == 0)
+            throw new ArgumentException("SelectColumns requires at least one column.", nameof(configure));
+
+        _selectColumns = selector.Columns.ToArray();
+        // Columns are already fully qualified (table.column) – no further qualification needed.
+        _selectColumnsNeedQualification = false;
         return this;
     }
 
@@ -320,6 +382,103 @@ public class QueryBuilder<T> where T : class
         return (sql.ToString(), _parameters);
     }
 
+    // ── Execute SELECT ────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// Builds and executes the SELECT query, mapping each row to
+    /// <typeparamref name="TResult"/>.
+    /// </summary>
+    /// <remarks>
+    /// Use this overload when the selected columns all belong to a single known
+    /// model type.  When the result set comes from a JOIN that spans multiple
+    /// tables, prefer <see cref="ToListAsync()"/> to get dynamic rows instead.
+    /// <para>
+    /// <typeparamref name="TResult"/> must have public properties and a public
+    /// parameterless constructor.  Annotating your model with
+    /// <c>[JadeDbObject]</c> will use the pre-compiled AOT-safe mapper;
+    /// otherwise the library falls back to reflection.
+    /// </para>
+    /// </remarks>
+    public async Task<IEnumerable<TResult>> ToListAsync<
+        [DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicProperties |
+                                    DynamicallyAccessedMemberTypes.PublicParameterlessConstructor)]
+        TResult>() where TResult : class
+    {
+        var (sql, parameters) = BuildSelect();
+        return await _dbService.ExecuteQueryAsync<TResult>(sql, parameters);
+    }
+
+    /// <summary>
+    /// Builds and executes the SELECT query, mapping each row to the main
+    /// model type <typeparamref name="T"/>.
+    /// Equivalent to <c>ToListAsync&lt;T&gt;()</c>.
+    /// </summary>
+    public Task<IEnumerable<T>> ToListAsync()
+        => ToListAsync<T>();
+
+    /// <summary>
+    /// Builds and executes the SELECT query, returning each row as a
+    /// <see langword="dynamic"/> object whose properties correspond to the
+    /// column names in the result set.
+    /// </summary>
+    /// <remarks>
+    /// This is the recommended overload for JOIN queries that select columns
+    /// from multiple tables, where no single model type represents the full
+    /// result row.  Each returned object is backed by an
+    /// <see cref="System.Dynamic.ExpandoObject"/> so properties can be
+    /// accessed by name.
+    /// <para>
+    /// <b>AOT note:</b> <see cref="System.Dynamic.ExpandoObject"/> is
+    /// fully AOT-safe.  Accessing a returned object's properties via the
+    /// <see langword="dynamic"/> keyword compiles correctly under Native AOT.
+    /// </para>
+    /// </remarks>
+    public async Task<IEnumerable<dynamic>> ToDynamicListAsync()
+    {
+        var (sql, parameters) = BuildSelect();
+        return await _dbService.ExecuteQueryDynamicAsync(sql, parameters);
+    }
+
+    /// <summary>
+    /// Builds and executes the SELECT query, mapping the first row to
+    /// <typeparamref name="TResult"/>, or returning <c>default</c> when the
+    /// result set is empty.
+    /// </summary>
+    /// <remarks>
+    /// The same AOT constraints as <see cref="ToListAsync{TResult}"/> apply.
+    /// </remarks>
+    public async Task<TResult?> FirstOrDefaultAsync<
+        [DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicProperties |
+                                    DynamicallyAccessedMemberTypes.PublicParameterlessConstructor)]
+        TResult>() where TResult : class
+    {
+        var (sql, parameters) = BuildSelect();
+        return await _dbService.ExecuteQueryFirstRowAsync<TResult>(sql, parameters);
+    }
+
+    /// <summary>
+    /// Builds and executes the SELECT query, mapping the first row to the
+    /// main model type <typeparamref name="T"/>, or returning <c>null</c>
+    /// when the result set is empty.
+    /// Equivalent to <c>FirstOrDefaultAsync&lt;T&gt;()</c>.
+    /// </summary>
+    public Task<T?> FirstOrDefaultAsync()
+        => FirstOrDefaultAsync<T>();
+
+    /// <summary>
+    /// Builds and executes the SELECT query, returning the first row as a
+    /// <see langword="dynamic"/> object, or <c>null</c> when the result set
+    /// is empty.  Backed by <see cref="System.Dynamic.ExpandoObject"/>.
+    /// </summary>
+    /// <remarks>
+    /// Recommended for JOIN queries that do not map to a single model type.
+    /// </remarks>
+    public async Task<dynamic?> FirstOrDefaultDynamicAsync()
+    {
+        var (sql, parameters) = BuildSelect();
+        return await _dbService.ExecuteQueryFirstRowDynamicAsync(sql, parameters);
+    }
+
     private void AppendWhere(StringBuilder sb)
     {
         if (_whereExpression == null) return;
@@ -443,6 +602,77 @@ public class QueryBuilder<T> where T : class
         throw new ArgumentException(
             "Selector must be a simple property access (p => p.Name) " +
             "or an anonymous type projection (p => new { p.Name, p.Price }).",
+            nameof(selector));
+    }
+
+    /// <summary>
+    /// Extracts fully-qualified database column names (table.column) from a two-parameter
+    /// LINQ-style selector expression spanning the main table and one joined table.
+    /// Supports:
+    /// <list type="bullet">
+    ///   <item><c>(p, c) =&gt; p.Name</c> — single property from either table</item>
+    ///   <item><c>(p, c) =&gt; new { p.Name, c.CategoryName }</c> — anonymous-type projection</item>
+    /// </list>
+    /// Column names are resolved via <see cref="JadeDbColumnAttribute"/> when present.
+    /// </summary>
+    private static string[] ExtractColumnsFromJoinSelector<TJoin, TResult>(
+        Expression<Func<T, TJoin, TResult>> selector,
+        string mainTableName,
+        string joinTableName)
+    {
+        var mainParam = selector.Parameters[0];
+        var joinParam  = selector.Parameters[1];
+
+        string QualifyMember(MemberExpression memberExpr)
+        {
+            if (memberExpr.Member is not PropertyInfo prop)
+                throw new ArgumentException(
+                    "Each member in the projection must reference a property.",
+                    nameof(selector));
+
+            var tableName = (memberExpr.Expression as ParameterExpression) == mainParam
+                ? mainTableName
+                : joinTableName;
+
+            return $"{tableName}.{ReflectionHelper.GetColumnName(prop)}";
+        }
+
+        var body = selector.Body;
+
+        // Anonymous type projection: (p, c) => new { p.Name, c.CategoryName }
+        if (body is NewExpression newExpr)
+        {
+            var cols = new List<string>();
+            foreach (var arg in newExpr.Arguments)
+            {
+                var memberExpr = arg as MemberExpression
+                    ?? (arg as UnaryExpression)?.Operand as MemberExpression;
+
+                if (memberExpr?.Expression is ParameterExpression)
+                {
+                    cols.Add(QualifyMember(memberExpr));
+                }
+                else
+                {
+                    throw new ArgumentException(
+                        "Each member in the anonymous type projection must be a simple property " +
+                        "access (e.g., (p, c) => new { p.Name, c.CategoryName }).",
+                        nameof(selector));
+                }
+            }
+            return cols.ToArray();
+        }
+
+        // Single property: (p, c) => p.Name  or  (p, c) => c.CategoryName
+        var single = body as MemberExpression
+            ?? (body as UnaryExpression)?.Operand as MemberExpression;
+
+        if (single?.Expression is ParameterExpression && single.Member is PropertyInfo)
+            return new[] { QualifyMember(single) };
+
+        throw new ArgumentException(
+            "Selector must be a simple property access (e.g., (p, c) => p.Name) " +
+            "or an anonymous type projection (e.g., (p, c) => new { p.Name, c.CategoryName }).",
             nameof(selector));
     }
 
