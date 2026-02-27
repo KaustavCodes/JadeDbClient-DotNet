@@ -94,6 +94,28 @@ public class AotCompatibilityTests
         Assert.Contains(properties, p => p.Name == "CreatedDate");
     }
 
+    [Fact]
+    public void ExecuteQueryDynamicAsync_ExistsOnInterface()
+    {
+        // Arrange
+        var method = typeof(IDatabaseService).GetMethod(nameof(IDatabaseService.ExecuteQueryDynamicAsync));
+
+        // Assert - method exists and has no generic type parameters (dynamic path needs no DMA)
+        Assert.NotNull(method);
+        Assert.Empty(method!.GetGenericArguments());
+    }
+
+    [Fact]
+    public void ExecuteQueryFirstRowDynamicAsync_ExistsOnInterface()
+    {
+        // Arrange
+        var method = typeof(IDatabaseService).GetMethod(nameof(IDatabaseService.ExecuteQueryFirstRowDynamicAsync));
+
+        // Assert - method exists and has no generic type parameters (dynamic path needs no DMA)
+        Assert.NotNull(method);
+        Assert.Empty(method!.GetGenericArguments());
+    }
+
     private class TestModel
     {
         public int Id { get; set; }

@@ -259,6 +259,11 @@ public class MsSqlDbService : IDatabaseService
     /// <summary>
     /// Executes a query and returns a single value (scalar) result.
     /// </summary>
+    /// <param name="query">The SQL query to be executed.</param>
+    /// <param name="parameters">>A collection of parameters to be used in the SQL query. Default is null.</param>
+    public async Task<T?> ExecuteScalar<T>(string query, IEnumerable<IDbDataParameter>? parameters = null)
+    {
+        using (var connection = new SqlConnection(_connectionString))
         {
             connection.Open();
             long startTimestamp = _serviceOptions.EnableLogging ? Stopwatch.GetTimestamp() : 0;

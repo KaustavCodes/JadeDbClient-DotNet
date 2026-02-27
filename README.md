@@ -1380,6 +1380,86 @@ var (sql, parameters) = new QueryBuilder<Product>(_dbService)
     .BuildSelect();
 ```
 
+### Executing queries
+
+Instead of calling `BuildSelect()` and passing the result to `_dbService.ExecuteQueryAsync` manually, you can use the built-in terminal execution methods to do both in one step:
+
+```csharp
+// Example DTO used in the typed-result snippets below
+public class ProductSummaryDto
+{
+    public string product_name { get; set; } = string.Empty;
+    public decimal Price { get; set; }
+}
+```
+
+```csharp
+// ── Typed results ─────────────────────────────────────────────────────────
+
+// Returns IEnumerable<Product> (maps to the main model type T)
+IEnumerable<Product> products = await new QueryBuilder<Product>(_dbService)
+    .Where(p => p.Price > 10m)
+    .OrderBy(p => p.Name)
+    .ToListAsync();
+
+// Returns IEnumerable<TResult> — useful when your SELECT columns map to a DTO
+// rather than the main model type (e.g. after a .Select(p => new { p.Name, p.Price }))
+IEnumerable<ProductSummaryDto> summaries = await new QueryBuilder<Product>(_dbService)
+    .Where(p => p.CategoryId == 3)
+    .ToListAsync<ProductSummaryDto>();
+
+// First matching row mapped to T, or null if no rows
+Product? product = await new QueryBuilder<Product>(_dbService)
+    .Where(p => p.Id == 42)
+    .FirstOrDefaultAsync();
+
+// First matching row as a DTO — useful after a projected SELECT
+ProductSummaryDto? summary = await new QueryBuilder<Product>(_dbService)
+    .Where(p => p.Id == 42)
+    .FirstOrDefaultAsync<ProductSummaryDto>();
+
+// ── Dynamic results (for JOIN queries spanning multiple tables) ────────────
+
+// Returns IEnumerable<dynamic> — each row is an ExpandoObject whose properties
+// match the column names returned by the query.
+IEnumerable<dynamic> rows = await new QueryBuilder<Product>(_dbService)
+    .Join<Category>((p, c) => p.CategoryId == c.Id)
+    .LeftJoin<Order>((p, o) => p.Id == o.Id)
+    .SelectColumns(cols => cols
+        .From<Product>(p => new { p.Name, p.Price })
+        .From<Category>(c => c.Name)
+        .From<Order>(o => o.Total))
+    .Where(p => p.Price > 10m)
+    .ToDynamicListAsync();
+
+foreach (dynamic row in rows)
+{
+    // Access columns by name through the dictionary interface (AOT-safe)
+    var dict = (IDictionary<string, object?>)row;
+    Console.WriteLine($"{dict["product_name"]} – {dict["category_name"]}");
+}
+
+// First dynamic row from a JOIN query, or null if no rows
+dynamic? firstRow = await new QueryBuilder<Product>(_dbService)
+    .Join<Category>((p, c) => p.CategoryId == c.Id)
+    .SelectColumns(cols => cols
+        .From<Product>(p => p.Name)
+        .From<Category>(c => c.Name))
+    .Where(p => p.Id == 1)
+    .FirstOrDefaultDynamicAsync();
+
+if (firstRow != null)
+{
+    var dict = (IDictionary<string, object?>)firstRow;
+    Console.WriteLine(dict["product_name"]);
+}
+```
+
+> **AOT note:** `ExpandoObject` is fully Native AOT-safe. Access its values through
+> `(IDictionary<string, object?>)row` rather than `row.PropertyName` syntax to avoid
+> any DLR dispatch — this also gives you direct dictionary access without dynamic
+> binding overhead.
+
 ### JOINs
 
 Use `Join<TJoin>`, `LeftJoin<TJoin>`, `RightJoin<TJoin>`, or `FullJoin<TJoin>` to combine tables. The ON condition is expressed as a two-parameter lambda — both property names and column attributes are resolved automatically.
@@ -1553,6 +1633,19 @@ var (sql, parameters) = new QueryBuilder<Product>(_dbService)
 
 > **Column qualification with joins**: When one or more joins are added, any unqualified column name in SELECT, WHERE, and ORDER BY that was derived from an expression (or from the default *all-columns* selection) is automatically prefixed with the main table name to prevent ambiguity. If you use the raw-string `Select("col1", "col2")` overload, you are responsible for qualifying any column names that could be ambiguous.
 
+### Execution method reference
+
+| Method | Returns | Notes |
+|---|---|---|
+| `.ToListAsync()` | `Task<IEnumerable<T>>` | Builds and executes SELECT, maps rows to main type `T` |
+| `.ToListAsync<TResult>()` | `Task<IEnumerable<TResult>>` | Builds and executes SELECT, maps rows to `TResult` |
+| `.ToDynamicListAsync()` | `Task<IEnumerable<dynamic>>` | Builds and executes SELECT, returns `ExpandoObject` rows — use for multi-table JOINs |
+| `.FirstOrDefaultAsync()` | `Task<T?>` | First row mapped to `T`, or `null` |
+| `.FirstOrDefaultAsync<TResult>()` | `Task<TResult?>` | First row mapped to `TResult`, or `null` |
+| `.FirstOrDefaultDynamicAsync()` | `Task<dynamic?>` | First row as `ExpandoObject`, or `null` — use for multi-table JOINs |
+
+> **AOT:** `ToListAsync<TResult>` / `FirstOrDefaultAsync<TResult>` carry `[DynamicallyAccessedMembers]` on `TResult` — the same guarantee as `ExecuteQueryAsync<T>`. The `dynamic` overloads (`ToDynamicListAsync`, `FirstOrDefaultDynamicAsync`) use `ExpandoObject` with no reflection and are fully Native AOT-safe.
+
 ### Security notes
 
 - **All values are parameterised** — user-supplied values never appear inline in the SQL string.
@@ -1570,7 +1663,7 @@ var (sql, parameters) = new QueryBuilder<Product>(_dbService)
 3. **Pagination on SQL Server requires ORDER BY** — calling `Skip`/`Take` without at least one `OrderBy` throws `InvalidOperationException`.
 4. **UPDATE and DELETE require a WHERE clause** — omitting `.Where(…)` before `BuildUpdate` / `BuildDelete` throws `InvalidOperationException` to prevent accidental full-table modifications.
 5. **`Id` property exclusion** — `BuildInsert` and `BuildUpdate` currently skip any property named exactly `Id`. If your primary key has a different name, map it with `[JadeDbColumn]` or exclude it manually.
-6. **JOIN result mapping** — `BuildSelect()` returns the SQL and its parameters; mapping a JOIN result set that spans multiple types must be done manually or via `ExecuteQueryAsync<T>` with a custom mapper. Use `Select<TJoin, TResult>` or `SelectColumns` (see above) to control which columns appear in the result set.
+6. **JOIN result mapping** — Use `ToDynamicListAsync()` / `FirstOrDefaultDynamicAsync()` to receive JOIN results as `ExpandoObject` rows when no single model type represents the full result set. Access columns through `(IDictionary<string, object?>)row` for full AOT compatibility.
 7. **Complex expressions are not yet supported** — only simple member access, binary comparisons, string methods (`Contains`, `StartsWith`, `EndsWith`), and the `In` extension are translated. Unsupported expressions throw `NotSupportedException`.
 
 ---

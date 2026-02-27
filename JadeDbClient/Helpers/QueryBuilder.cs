@@ -1,11 +1,13 @@
 using System;
 using System.Collections.Generic;
 using System.Data;
+using System.Diagnostics.CodeAnalysis;
 using System.Linq;
 using System.Linq.Expressions;
 using System.Reflection;
 using System.Text;
 using System.Text.RegularExpressions;
+using System.Threading.Tasks;
 using JadeDbClient.Interfaces;
 using JadeDbClient.Enums;
 using JadeDbClient.Helpers;
@@ -378,6 +380,103 @@ public class QueryBuilder<T> where T : class
         AppendWhere(sql);
 
         return (sql.ToString(), _parameters);
+    }
+
+    // ── Execute SELECT ────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// Builds and executes the SELECT query, mapping each row to
+    /// <typeparamref name="TResult"/>.
+    /// </summary>
+    /// <remarks>
+    /// Use this overload when the selected columns all belong to a single known
+    /// model type.  When the result set comes from a JOIN that spans multiple
+    /// tables, prefer <see cref="ToListAsync()"/> to get dynamic rows instead.
+    /// <para>
+    /// <typeparamref name="TResult"/> must have public properties and a public
+    /// parameterless constructor.  Annotating your model with
+    /// <c>[JadeDbObject]</c> will use the pre-compiled AOT-safe mapper;
+    /// otherwise the library falls back to reflection.
+    /// </para>
+    /// </remarks>
+    public async Task<IEnumerable<TResult>> ToListAsync<
+        [DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicProperties |
+                                    DynamicallyAccessedMemberTypes.PublicParameterlessConstructor)]
+        TResult>() where TResult : class
+    {
+        var (sql, parameters) = BuildSelect();
+        return await _dbService.ExecuteQueryAsync<TResult>(sql, parameters);
+    }
+
+    /// <summary>
+    /// Builds and executes the SELECT query, mapping each row to the main
+    /// model type <typeparamref name="T"/>.
+    /// Equivalent to <c>ToListAsync&lt;T&gt;()</c>.
+    /// </summary>
+    public Task<IEnumerable<T>> ToListAsync()
+        => ToListAsync<T>();
+
+    /// <summary>
+    /// Builds and executes the SELECT query, returning each row as a
+    /// <see langword="dynamic"/> object whose properties correspond to the
+    /// column names in the result set.
+    /// </summary>
+    /// <remarks>
+    /// This is the recommended overload for JOIN queries that select columns
+    /// from multiple tables, where no single model type represents the full
+    /// result row.  Each returned object is backed by an
+    /// <see cref="System.Dynamic.ExpandoObject"/> so properties can be
+    /// accessed by name.
+    /// <para>
+    /// <b>AOT note:</b> <see cref="System.Dynamic.ExpandoObject"/> is
+    /// fully AOT-safe.  Accessing a returned object's properties via the
+    /// <see langword="dynamic"/> keyword compiles correctly under Native AOT.
+    /// </para>
+    /// </remarks>
+    public async Task<IEnumerable<dynamic>> ToDynamicListAsync()
+    {
+        var (sql, parameters) = BuildSelect();
+        return await _dbService.ExecuteQueryDynamicAsync(sql, parameters);
+    }
+
+    /// <summary>
+    /// Builds and executes the SELECT query, mapping the first row to
+    /// <typeparamref name="TResult"/>, or returning <c>default</c> when the
+    /// result set is empty.
+    /// </summary>
+    /// <remarks>
+    /// The same AOT constraints as <see cref="ToListAsync{TResult}"/> apply.
+    /// </remarks>
+    public async Task<TResult?> FirstOrDefaultAsync<
+        [DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicProperties |
+                                    DynamicallyAccessedMemberTypes.PublicParameterlessConstructor)]
+        TResult>() where TResult : class
+    {
+        var (sql, parameters) = BuildSelect();
+        return await _dbService.ExecuteQueryFirstRowAsync<TResult>(sql, parameters);
+    }
+
+    /// <summary>
+    /// Builds and executes the SELECT query, mapping the first row to the
+    /// main model type <typeparamref name="T"/>, or returning <c>null</c>
+    /// when the result set is empty.
+    /// Equivalent to <c>FirstOrDefaultAsync&lt;T&gt;()</c>.
+    /// </summary>
+    public Task<T?> FirstOrDefaultAsync()
+        => FirstOrDefaultAsync<T>();
+
+    /// <summary>
+    /// Builds and executes the SELECT query, returning the first row as a
+    /// <see langword="dynamic"/> object, or <c>null</c> when the result set
+    /// is empty.  Backed by <see cref="System.Dynamic.ExpandoObject"/>.
+    /// </summary>
+    /// <remarks>
+    /// Recommended for JOIN queries that do not map to a single model type.
+    /// </remarks>
+    public async Task<dynamic?> FirstOrDefaultDynamicAsync()
+    {
+        var (sql, parameters) = BuildSelect();
+        return await _dbService.ExecuteQueryFirstRowDynamicAsync(sql, parameters);
     }
 
     private void AppendWhere(StringBuilder sb)
