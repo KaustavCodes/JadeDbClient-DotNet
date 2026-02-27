@@ -10,7 +10,7 @@ using JadeDbClient.Enums;
 
 namespace JadeDbClient;
 
-public class PostgreSqlDbService : IDatabaseService
+public class PostgreSqlDbService : IDatabaseService, IDynamicQueryExecutor
 {
     private readonly string _connectionString;
     private readonly JadeDbMapperOptions _mapperOptions;

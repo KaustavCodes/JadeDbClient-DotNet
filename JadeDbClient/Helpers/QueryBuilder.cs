@@ -426,17 +426,28 @@ public class QueryBuilder<T> where T : class
     /// from multiple tables, where no single model type represents the full
     /// result row.  Each returned object is backed by an
     /// <see cref="System.Dynamic.ExpandoObject"/> so properties can be
-    /// accessed by name.
+    /// accessed by name via <c>(IDictionary&lt;string, object?&gt;)row</c>.
     /// <para>
     /// <b>AOT note:</b> <see cref="System.Dynamic.ExpandoObject"/> is
-    /// fully AOT-safe.  Accessing a returned object's properties via the
-    /// <see langword="dynamic"/> keyword compiles correctly under Native AOT.
+    /// fully AOT-safe.  The dynamic execution path is provided by the
+    /// built-in database services and does not affect the public
+    /// <see cref="IDatabaseService"/> interface, so existing custom
+    /// implementations are never broken.
     /// </para>
     /// </remarks>
+    /// <exception cref="NotSupportedException">
+    /// Thrown when the injected <see cref="IDatabaseService"/> implementation
+    /// does not support dynamic query execution.  All built-in service classes
+    /// (MsSqlDbService, MySqlDbService, PostgreSqlDbService) support it.
+    /// </exception>
     public async Task<IEnumerable<dynamic>> ToDynamicListAsync()
     {
         var (sql, parameters) = BuildSelect();
-        return await _dbService.ExecuteQueryDynamicAsync(sql, parameters);
+        if (_dbService is IDynamicQueryExecutor executor)
+            return await executor.ExecuteQueryDynamicAsync(sql, parameters);
+        throw new NotSupportedException(
+            $"The database service '{_dbService.GetType().Name}' does not support dynamic query execution. " +
+            "Only the built-in service classes (MsSqlDbService, MySqlDbService, PostgreSqlDbService) implement this feature.");
     }
 
     /// <summary>
@@ -472,11 +483,20 @@ public class QueryBuilder<T> where T : class
     /// </summary>
     /// <remarks>
     /// Recommended for JOIN queries that do not map to a single model type.
+    /// See <see cref="ToDynamicListAsync"/> for AOT and support notes.
     /// </remarks>
+    /// <exception cref="NotSupportedException">
+    /// Thrown when the injected <see cref="IDatabaseService"/> implementation
+    /// does not support dynamic query execution.
+    /// </exception>
     public async Task<dynamic?> FirstOrDefaultDynamicAsync()
     {
         var (sql, parameters) = BuildSelect();
-        return await _dbService.ExecuteQueryFirstRowDynamicAsync(sql, parameters);
+        if (_dbService is IDynamicQueryExecutor executor)
+            return await executor.ExecuteQueryFirstRowDynamicAsync(sql, parameters);
+        throw new NotSupportedException(
+            $"The database service '{_dbService.GetType().Name}' does not support dynamic query execution. " +
+            "Only the built-in service classes (MsSqlDbService, MySqlDbService, PostgreSqlDbService) implement this feature.");
     }
 
     private void AppendWhere(StringBuilder sb)

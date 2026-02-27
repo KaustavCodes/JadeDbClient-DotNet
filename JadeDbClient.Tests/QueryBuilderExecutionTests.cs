@@ -48,10 +48,8 @@ public class QueryBuilderExecutionTests
     // ── Helpers ──────────────────────────────────────────────────────────────
 
     /// <summary>
-    /// Creates a mock IDatabaseService pre-wired with ExecuteQueryAsync and
-    /// ExecuteQueryFirstRowAsync to return the supplied typed lists/items, and
-    /// ExecuteQueryDynamicAsync / ExecuteQueryFirstRowDynamicAsync to return
-    /// the supplied dynamic lists/items.
+    /// Creates a mock IDatabaseService (also wired as IDynamicQueryExecutor via
+    /// Moq's As&lt;&gt;) pre-wired to return the supplied typed/dynamic results.
     /// </summary>
     private static Mock<IDatabaseService> CreateMockService(
         IEnumerable<Product>? typedList = null,
@@ -81,11 +79,16 @@ public class QueryBuilderExecutionTests
                 It.IsAny<string>(), It.IsAny<IEnumerable<IDbDataParameter>?>()))
             .ReturnsAsync(typedFirst);
 
-        mock.Setup(s => s.ExecuteQueryDynamicAsync(
+        // Wire up the library-internal IDynamicQueryExecutor via Moq's As<>().
+        // This mirrors how the built-in service classes expose the dynamic path
+        // without it being part of the public IDatabaseService interface.
+        mock.As<IDynamicQueryExecutor>()
+            .Setup(s => s.ExecuteQueryDynamicAsync(
                 It.IsAny<string>(), It.IsAny<IEnumerable<IDbDataParameter>?>()))
             .ReturnsAsync(dynamicList ?? Array.Empty<dynamic>());
 
-        mock.Setup(s => s.ExecuteQueryFirstRowDynamicAsync(
+        mock.As<IDynamicQueryExecutor>()
+            .Setup(s => s.ExecuteQueryFirstRowDynamicAsync(
                 It.IsAny<string>(), It.IsAny<IEnumerable<IDbDataParameter>?>()))
             .Returns(Task.FromResult<dynamic?>(dynamicFirst));
 
@@ -160,7 +163,7 @@ public class QueryBuilderExecutionTests
                 .From<Category>(c => c.Name))
             .ToDynamicListAsync();
 
-        mock.Verify(s => s.ExecuteQueryDynamicAsync(
+        mock.As<IDynamicQueryExecutor>().Verify(s => s.ExecuteQueryDynamicAsync(
             It.Is<string>(sql =>
                 sql.Contains("INNER JOIN categories") &&
                 sql.Contains("products.product_name") &&
@@ -285,7 +288,7 @@ public class QueryBuilderExecutionTests
 
         await qb.Join<Category>((p, c) => p.CategoryId == c.Id).FirstOrDefaultDynamicAsync();
 
-        mock.Verify(s => s.ExecuteQueryFirstRowDynamicAsync(
+        mock.As<IDynamicQueryExecutor>().Verify(s => s.ExecuteQueryFirstRowDynamicAsync(
             It.Is<string>(sql => sql.Contains("INNER JOIN categories")),
             It.IsAny<IEnumerable<IDbDataParameter>?>()), Times.Once);
     }
@@ -325,5 +328,36 @@ public class QueryBuilderExecutionTests
             .ToListAsync();
 
         capturedSql.Should().Be(expectedSql);
+    }
+
+    // ════════════════════════════════════════════════════════════════════════
+    // 8. NotSupportedException for custom IDatabaseService that does not
+    //    implement IDynamicQueryExecutor
+    // ════════════════════════════════════════════════════════════════════════
+
+    [Fact]
+    public async Task ToDynamicListAsync_ThrowsNotSupported_WhenServiceDoesNotImplementDynamicExecutor()
+    {
+        // A plain Mock<IDatabaseService> does NOT also implement IDynamicQueryExecutor
+        // by default (we have to explicitly call .As<IDynamicQueryExecutor>()).
+        var mock = new Mock<IDatabaseService>();
+        mock.Setup(s => s.Dialect).Returns(DatabaseDialect.MsSql);
+        mock.Setup(s => s.PluralizeTableNames).Returns(false);
+
+        var qb = new QueryBuilder<Product>(mock.Object);
+
+        await Assert.ThrowsAsync<NotSupportedException>(() => qb.ToDynamicListAsync());
+    }
+
+    [Fact]
+    public async Task FirstOrDefaultDynamicAsync_ThrowsNotSupported_WhenServiceDoesNotImplementDynamicExecutor()
+    {
+        var mock = new Mock<IDatabaseService>();
+        mock.Setup(s => s.Dialect).Returns(DatabaseDialect.MsSql);
+        mock.Setup(s => s.PluralizeTableNames).Returns(false);
+
+        var qb = new QueryBuilder<Product>(mock.Object);
+
+        await Assert.ThrowsAsync<NotSupportedException>(() => qb.FirstOrDefaultDynamicAsync());
     }
 }

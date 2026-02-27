@@ -95,25 +95,28 @@ public class AotCompatibilityTests
     }
 
     [Fact]
-    public void ExecuteQueryDynamicAsync_ExistsOnInterface()
+    public void ExecuteQueryDynamicAsync_ExistsOnInternalInterface()
     {
-        // Arrange
-        var method = typeof(IDatabaseService).GetMethod(nameof(IDatabaseService.ExecuteQueryDynamicAsync));
+        // The dynamic execution path lives on the library-internal IDynamicQueryExecutor,
+        // NOT on the public IDatabaseService, so existing custom implementations are
+        // never broken by this feature.
+        var publicMethod = typeof(IDatabaseService).GetMethod("ExecuteQueryDynamicAsync");
+        Assert.Null(publicMethod); // must NOT be on the public interface
 
-        // Assert - method exists and has no generic type parameters (dynamic path needs no DMA)
-        Assert.NotNull(method);
-        Assert.Empty(method!.GetGenericArguments());
+        var internalMethod = typeof(IDynamicQueryExecutor).GetMethod("ExecuteQueryDynamicAsync");
+        Assert.NotNull(internalMethod);
+        Assert.Empty(internalMethod!.GetGenericArguments());
     }
 
     [Fact]
-    public void ExecuteQueryFirstRowDynamicAsync_ExistsOnInterface()
+    public void ExecuteQueryFirstRowDynamicAsync_ExistsOnInternalInterface()
     {
-        // Arrange
-        var method = typeof(IDatabaseService).GetMethod(nameof(IDatabaseService.ExecuteQueryFirstRowDynamicAsync));
+        var publicMethod = typeof(IDatabaseService).GetMethod("ExecuteQueryFirstRowDynamicAsync");
+        Assert.Null(publicMethod); // must NOT be on the public interface
 
-        // Assert - method exists and has no generic type parameters (dynamic path needs no DMA)
-        Assert.NotNull(method);
-        Assert.Empty(method!.GetGenericArguments());
+        var internalMethod = typeof(IDynamicQueryExecutor).GetMethod("ExecuteQueryFirstRowDynamicAsync");
+        Assert.NotNull(internalMethod);
+        Assert.Empty(internalMethod!.GetGenericArguments());
     }
 
     private class TestModel

@@ -10,7 +10,7 @@ using JadeDbClient.Enums;
 
 namespace JadeDbClient;
 
-public class MySqlDbService : IDatabaseService
+public class MySqlDbService : IDatabaseService, IDynamicQueryExecutor
 {
     private readonly string _connectionString;
     private readonly JadeDbMapperOptions _mapperOptions;
