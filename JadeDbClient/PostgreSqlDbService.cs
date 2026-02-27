@@ -56,6 +56,8 @@ public class PostgreSqlDbService : IDatabaseService
 
     public DatabaseDialect Dialect => DatabaseDialect.PostgreSql;
 
+    public bool PluralizeTableNames => _serviceOptions.PluralizeTableName;
+
     /// <summary>
     /// Open a connection to the database
     /// </summary>

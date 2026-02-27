@@ -8,6 +8,8 @@ public interface IDatabaseService
 {
     DatabaseDialect Dialect { get; }
 
+    bool PluralizeTableNames { get; }
+
     IDbConnection? Connection { get; set; }
 
     /// <summary>

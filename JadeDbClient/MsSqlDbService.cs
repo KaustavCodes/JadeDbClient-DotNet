@@ -57,6 +57,8 @@ public class MsSqlDbService : IDatabaseService
 
     public DatabaseDialect Dialect => DatabaseDialect.MsSql;
 
+    public bool PluralizeTableNames => _serviceOptions.PluralizeTableName;
+
     /// <summary>
     /// Open a connection to the database
     /// </summary>

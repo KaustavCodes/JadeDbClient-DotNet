@@ -57,6 +57,8 @@ public class MySqlDbService : IDatabaseService
 
     public DatabaseDialect Dialect => DatabaseDialect.MySql;
 
+    public bool PluralizeTableNames => _serviceOptions.PluralizeTableName;
+
     /// <summary>
     /// Open a connection to the database
     /// </summary>

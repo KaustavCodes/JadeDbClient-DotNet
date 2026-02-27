@@ -35,7 +35,7 @@ public class QueryBuilder<T> where T : class
     {
         _dbService = dbService ?? throw new ArgumentNullException(nameof(dbService));
         _dialect = dbService.Dialect;
-        _tableName = ReflectionHelper.GetTableName(typeof(T));
+        _tableName = ReflectionHelper.GetTableName(typeof(T), dbService.PluralizeTableNames);
     }
 
     // ── Fluent methods ──
@@ -170,7 +170,7 @@ public class QueryBuilder<T> where T : class
     {
         if (on == null) throw new ArgumentNullException(nameof(on));
 
-        var joinTableName = ReflectionHelper.GetTableName(typeof(TJoin));
+        var joinTableName = ReflectionHelper.GetTableName(typeof(TJoin), _dbService.PluralizeTableNames);
         var leftParam = on.Parameters[0];
         var rightParam = on.Parameters[1];
 

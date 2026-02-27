@@ -13,6 +13,8 @@ public static class JadeDbServiceRegistration
         public bool EnableLogging { get; set; } = false;
 
         public bool LogExecutedQuery { get; set; } = false;
+
+        public bool PluralizeTableName { get; set; } = false;
     }
 
     public static void AddJadeDbService(this IServiceCollection services, Action<JadeDbMapperOptions>? configure = null, Action<JadeDbServiceOptions>? serviceOptionsConfigure = null)
