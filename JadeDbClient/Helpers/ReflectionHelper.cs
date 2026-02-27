@@ -33,9 +33,9 @@ internal static class ReflectionHelper
 
     /// <summary>
     /// Gets the database table name for a type, respecting the JadeDbTable attribute if present.
-    /// Falls back to a simple pluralized class name convention.
+    /// Falls back to the class name, optionally pluralized.
     /// </summary>
-    internal static string GetTableName(Type type)
+    internal static string GetTableName(Type type, bool pluralize = false)
     {
         var tableAttribute = type.GetCustomAttribute<JadeDbTableAttribute>();
         if (tableAttribute != null)
@@ -43,8 +43,14 @@ internal static class ReflectionHelper
             return tableAttribute.TableName;
         }
 
-        // Simple pluralization convention (can be improved later with more rules or a library)
         var name = type.Name;
+
+        if (!pluralize)
+        {
+            return name;
+        }
+
+        // Simple pluralization convention (can be improved later with more rules or a library)
         if (name.EndsWith("y", StringComparison.OrdinalIgnoreCase) && name.Length > 1 &&
             !"aeiouAEIOU".Contains(name[^2]))
         {
