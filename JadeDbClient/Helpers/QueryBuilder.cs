@@ -67,6 +67,30 @@ public class QueryBuilder<T> where T : class
         return this;
     }
 
+    /// <summary>
+    /// Selects specific columns from the main table and one joined table using a
+    /// type-safe two-parameter expression.  Each column reference is automatically
+    /// qualified with its respective table name.
+    /// <para>
+    /// Example: <c>.Select((p, c) =&gt; new { p.Name, c.CategoryName })</c>
+    /// </para>
+    /// Column names are resolved via <see cref="JadeDbColumnAttribute"/> when present.
+    /// </summary>
+    /// <typeparam name="TJoin">The type of the joined table.</typeparam>
+    /// <typeparam name="TResult">The anonymous or concrete result type of the projection.</typeparam>
+    /// <param name="selector">A two-parameter lambda projecting columns from both tables.</param>
+    public QueryBuilder<T> Select<TJoin, TResult>(Expression<Func<T, TJoin, TResult>> selector)
+        where TJoin : class
+    {
+        if (selector == null) throw new ArgumentNullException(nameof(selector));
+
+        var joinTableName = ReflectionHelper.GetTableName(typeof(TJoin), _dbService.PluralizeTableNames);
+        _selectColumns = ExtractColumnsFromJoinSelector(selector, _tableName, joinTableName);
+        // Columns are already fully qualified (table.column) – no further qualification needed.
+        _selectColumnsNeedQualification = false;
+        return this;
+    }
+
     public QueryBuilder<T> Where(Expression<Func<T, bool>> where)
     {
         _whereExpression = where;
@@ -443,6 +467,77 @@ public class QueryBuilder<T> where T : class
         throw new ArgumentException(
             "Selector must be a simple property access (p => p.Name) " +
             "or an anonymous type projection (p => new { p.Name, p.Price }).",
+            nameof(selector));
+    }
+
+    /// <summary>
+    /// Extracts fully-qualified database column names (table.column) from a two-parameter
+    /// LINQ-style selector expression spanning the main table and one joined table.
+    /// Supports:
+    /// <list type="bullet">
+    ///   <item><c>(p, c) =&gt; p.Name</c> — single property from either table</item>
+    ///   <item><c>(p, c) =&gt; new { p.Name, c.CategoryName }</c> — anonymous-type projection</item>
+    /// </list>
+    /// Column names are resolved via <see cref="JadeDbColumnAttribute"/> when present.
+    /// </summary>
+    private static string[] ExtractColumnsFromJoinSelector<TJoin, TResult>(
+        Expression<Func<T, TJoin, TResult>> selector,
+        string mainTableName,
+        string joinTableName)
+    {
+        var mainParam = selector.Parameters[0];
+        var joinParam  = selector.Parameters[1];
+
+        string QualifyMember(MemberExpression memberExpr)
+        {
+            if (memberExpr.Member is not PropertyInfo prop)
+                throw new ArgumentException(
+                    "Each member in the projection must reference a property.",
+                    nameof(selector));
+
+            var tableName = (memberExpr.Expression as ParameterExpression) == mainParam
+                ? mainTableName
+                : joinTableName;
+
+            return $"{tableName}.{ReflectionHelper.GetColumnName(prop)}";
+        }
+
+        var body = selector.Body;
+
+        // Anonymous type projection: (p, c) => new { p.Name, c.CategoryName }
+        if (body is NewExpression newExpr)
+        {
+            var cols = new List<string>();
+            foreach (var arg in newExpr.Arguments)
+            {
+                var memberExpr = arg as MemberExpression
+                    ?? (arg as UnaryExpression)?.Operand as MemberExpression;
+
+                if (memberExpr?.Expression is ParameterExpression)
+                {
+                    cols.Add(QualifyMember(memberExpr));
+                }
+                else
+                {
+                    throw new ArgumentException(
+                        "Each member in the anonymous type projection must be a simple property " +
+                        "access (e.g., (p, c) => new { p.Name, c.CategoryName }).",
+                        nameof(selector));
+                }
+            }
+            return cols.ToArray();
+        }
+
+        // Single property: (p, c) => p.Name  or  (p, c) => c.CategoryName
+        var single = body as MemberExpression
+            ?? (body as UnaryExpression)?.Operand as MemberExpression;
+
+        if (single?.Expression is ParameterExpression && single.Member is PropertyInfo)
+            return new[] { QualifyMember(single) };
+
+        throw new ArgumentException(
+            "Selector must be a simple property access (e.g., (p, c) => p.Name) " +
+            "or an anonymous type projection (e.g., (p, c) => new { p.Name, c.CategoryName }).",
             nameof(selector));
     }
 
