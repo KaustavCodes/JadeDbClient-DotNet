@@ -218,6 +218,26 @@ app.MapGet("/test-postgres", async (IDatabaseService dbConfig) =>
     return results;
 });
 
+
+app.MapGet("/test-postgres-single", async (IDatabaseService dbConfig) =>
+{
+    //Execute a stored proceude with output parameter
+    List<IDbDataParameter> dbDataParameters = new List<IDbDataParameter>();
+
+    dbDataParameters.Add(dbConfig.GetParameter("p_name", "PostgresUser", DbType.String, ParameterDirection.Input, 250));
+    dbDataParameters.Add(dbConfig.GetParameter("p_outputparam", "test", DbType.String, ParameterDirection.Output, 250));
+
+
+    await dbConfig.ExecuteStoredProcedureAsync("add_data", dbDataParameters);
+
+    //Execute a query
+    string query = "SELECT name FROM public.tbl_test;";
+
+    IEnumerable<DataModel> results = await dbConfig.ExecuteQueryAsync<DataModel>(query);
+
+    return results;
+});
+
 app.MapGet("/test-postgres2", async (IJadeDbServiceFactory dbFactory) =>
 {
     var mainDb    = dbFactory.GetService();    // or dbFactory.GetService() for the default
