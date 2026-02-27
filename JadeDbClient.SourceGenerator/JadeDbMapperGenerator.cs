@@ -98,17 +98,43 @@ namespace JadeDbClient.SourceGenerator
 
                 foreach (var model in models)
                 {
-                    sb.AppendLine($"        JadeDbMapperOptions.RegisterGlobalMapper<{model.FullName}>(static (global::System.Data.IDataReader reader) => new {model.FullName}");
+                    var settableProps = model.Properties.Where(p => p.HasPublicSetter).ToArray();
+
+                    sb.AppendLine($"        JadeDbMapperOptions.RegisterGlobalMapper<{model.FullName}>(static (global::System.Data.IDataReader reader) =>");
                     sb.AppendLine("        {");
+
+                    // Declare ordinal variables initialised to -1 (column absent)
+                    foreach (var prop in settableProps)
+                    {
+                        sb.AppendLine($"            int __ord_{prop.Name} = -1;");
+                    }
+
+                    // Populate ordinals with a single pass over the reader's columns
+                    sb.AppendLine("            for (int __i = 0; __i < reader.FieldCount; __i++)");
+                    sb.AppendLine("            {");
+                    sb.AppendLine("                var __cn = reader.GetName(__i);");
+                    foreach (var prop in settableProps)
+                    {
+                        sb.AppendLine($"                if (string.Equals(__cn, \"{prop.ColumnName}\", global::System.StringComparison.OrdinalIgnoreCase)) {{ __ord_{prop.Name} = __i; continue; }}");
+                    }
+                    sb.AppendLine("            }");
+
+                    // Build and return the mapped object
+                    sb.AppendLine($"            return new {model.FullName}");
+                    sb.AppendLine("            {");
 
                     foreach (var prop in model.Properties)
                     {
                         string? expr = GetMappingExpression(prop);
                         if (expr == null) continue;
 
-                        sb.AppendLine($"            {prop.Name} = {expr},");
+                        // Use default! only for non-nullable reference types to suppress the
+                        // nullable warning; value types and nullable types can use plain default.
+                        string fallback = (!prop.IsValueType && !prop.IsNullable) ? "default!" : "default";
+                        sb.AppendLine($"                {prop.Name} = __ord_{prop.Name} >= 0 ? ({expr}) : {fallback},");
                     }
 
+                    sb.AppendLine("            };");
                     sb.AppendLine("        });");
                     sb.AppendLine();
 
@@ -139,7 +165,7 @@ namespace JadeDbClient.SourceGenerator
         {
             if (!p.HasPublicSetter) return null; // Skip property (recommended)
 
-            string ord = $"reader.GetOrdinal(\"{p.ColumnName}\")";
+            string ord = $"__ord_{p.Name}";
             string dbNull = $"reader.IsDBNull({ord})";
 
             string baseExpr;
