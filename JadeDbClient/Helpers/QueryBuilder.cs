@@ -91,6 +91,42 @@ public class QueryBuilder<T> where T : class
         return this;
     }
 
+    /// <summary>
+    /// Selects columns from the main table and any number of joined tables using a fluent
+    /// <see cref="JoinColumnSelector"/> builder.  Each <c>.From&lt;TTable&gt;()</c> call appends
+    /// one or more fully-qualified <c>table.column</c> references to the SELECT list.
+    /// <para>
+    /// This overload is the recommended choice when more than one JOIN is present.
+    /// </para>
+    /// <para>
+    /// Example:
+    /// <code>
+    /// qb.Join&lt;Category&gt;(...)
+    ///   .Join&lt;Order&gt;(...)
+    ///   .SelectColumns(cols =&gt; cols
+    ///       .From&lt;Product&gt;(p =&gt; new { p.Name, p.Price })
+    ///       .From&lt;Category&gt;(c =&gt; c.Name)
+    ///       .From&lt;Order&gt;(o =&gt; o.Total))
+    ///   .BuildSelect();
+    /// </code>
+    /// </para>
+    /// </summary>
+    public QueryBuilder<T> SelectColumns(Action<JoinColumnSelector> configure)
+    {
+        if (configure == null) throw new ArgumentNullException(nameof(configure));
+
+        var selector = new JoinColumnSelector(_dbService);
+        configure(selector);
+
+        if (selector.Columns.Count == 0)
+            throw new ArgumentException("SelectColumns requires at least one column.", nameof(configure));
+
+        _selectColumns = selector.Columns.ToArray();
+        // Columns are already fully qualified (table.column) – no further qualification needed.
+        _selectColumnsNeedQualification = false;
+        return this;
+    }
+
     public QueryBuilder<T> Where(Expression<Func<T, bool>> where)
     {
         _whereExpression = where;
