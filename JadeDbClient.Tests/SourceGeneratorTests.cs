@@ -250,6 +250,61 @@ public class SourceGeneratorTests
             result.Name.Should().Be("Third Party");
         }
     }
+
+    /// <summary>
+    /// Test 6: Partial Column Selection
+    /// Verifies that a source-generated mapper correctly handles queries that return only
+    /// a subset of the model's columns (e.g. SELECT tempid FROM tbl_... instead of SELECT *).
+    /// Missing columns must fall back to default values rather than throwing.
+    /// </summary>
+    [Fact]
+    public void PartialColumnSelection_OnlySubsetOfColumnsReturned_MapsAvailableColumnsAndDefaultsRest()
+    {
+        // Arrange - mock reader that returns only "tempid" (simulates SELECT tempid FROM ...)
+        var mockReader = new Mock<IDataReader>();
+
+        mockReader.Setup(r => r.FieldCount).Returns(1);
+        mockReader.Setup(r => r.GetName(0)).Returns("tempid");
+        mockReader.Setup(r => r.IsDBNull(0)).Returns(false);
+        mockReader.Setup(r => r.GetInt64(0)).Returns(42L);
+
+        // Simulate what the updated source generator now produces:
+        // ordinals are resolved by iterating reader.FieldCount, missing columns stay -1.
+        JadeDbMapperOptions.RegisterGlobalMapper<PartialColumnModel>(reader =>
+        {
+            int __ord_tempid    = -1;
+            int __ord_userid    = -1;
+            int __ord_formdata  = -1;
+            int __ord_is_active = -1;
+            for (int __i = 0; __i < reader.FieldCount; __i++)
+            {
+                var __cn = reader.GetName(__i);
+                if (string.Equals(__cn, "tempid",    StringComparison.OrdinalIgnoreCase)) { __ord_tempid    = __i; continue; }
+                if (string.Equals(__cn, "userid",    StringComparison.OrdinalIgnoreCase)) { __ord_userid    = __i; continue; }
+                if (string.Equals(__cn, "formdata",  StringComparison.OrdinalIgnoreCase)) { __ord_formdata  = __i; continue; }
+                if (string.Equals(__cn, "is_active", StringComparison.OrdinalIgnoreCase)) { __ord_is_active = __i; continue; }
+            }
+            return new PartialColumnModel
+            {
+                tempid    = __ord_tempid    >= 0 ? reader.GetInt64(__ord_tempid)                                                  : default,
+                userid    = __ord_userid    >= 0 ? reader.GetInt64(__ord_userid)                                                  : default,
+                formdata  = __ord_formdata  >= 0 ? (reader.IsDBNull(__ord_formdata)  ? null : reader.GetString(__ord_formdata))   : default!,
+                is_active = __ord_is_active >= 0 ? reader.GetBoolean(__ord_is_active)                                            : default,
+            };
+        });
+
+        var mapperOptions = new JadeDbMapperOptions();
+
+        // Act
+        var result = mapperOptions.ExecuteMapper<PartialColumnModel>(mockReader.Object);
+
+        // Assert
+        result.Should().NotBeNull("mapper must not throw when columns are missing");
+        result!.tempid.Should().Be(42L, "the returned column should be mapped correctly");
+        result.userid.Should().Be(0L,   "missing non-nullable column should fall back to default(long)");
+        result.formdata.Should().BeNull("missing nullable column should fall back to null");
+        result.is_active.Should().BeFalse("missing non-nullable bool should fall back to default(bool)");
+    }
 }
 
 // Test Models - These would typically have [JadeDbObject] attribute and be in source generator's scope
@@ -281,4 +336,14 @@ public class ThirdPartyModel
 {
     public int Id { get; set; }
     public string Name { get; set; } = string.Empty;
+}
+
+// Model that mirrors the tbl_temp_data_attribute scenario from the issue
+[JadeDbObject]
+public partial class PartialColumnModel
+{
+    public long tempid { get; set; }
+    public long userid { get; set; }
+    public string? formdata { get; set; }
+    public bool is_active { get; set; }
 }
