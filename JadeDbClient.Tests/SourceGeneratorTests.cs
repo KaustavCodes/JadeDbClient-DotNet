@@ -252,7 +252,70 @@ public class SourceGeneratorTests
     }
 
     /// <summary>
-    /// Test 6: Partial Column Selection
+    /// Test 6: Inheritance Support
+    /// Verifies that a mapper for a derived class correctly maps properties declared on base
+    /// classes (not just those declared on the derived class itself).
+    /// This simulates what the fixed source generator now produces for inherited models.
+    /// </summary>
+    [Fact]
+    public void InheritedModel_SourceGeneratedMapper_MapsBaseClassPropertiesCorrectly()
+    {
+        // Arrange - mock reader returning columns for both base and derived properties
+        var mockReader = new Mock<IDataReader>();
+
+        mockReader.Setup(r => r.FieldCount).Returns(4);
+        mockReader.Setup(r => r.GetName(0)).Returns("mission_id");
+        mockReader.Setup(r => r.GetName(1)).Returns("name");
+        mockReader.Setup(r => r.GetName(2)).Returns("is_active");
+        mockReader.Setup(r => r.GetName(3)).Returns("is_joined");
+
+        mockReader.Setup(r => r.IsDBNull(It.IsAny<int>())).Returns(false);
+        mockReader.Setup(r => r.GetInt64(0)).Returns(42L);
+        mockReader.Setup(r => r.GetString(1)).Returns("Test Mission");
+        mockReader.Setup(r => r.GetBoolean(2)).Returns(true);
+        mockReader.Setup(r => r.GetBoolean(3)).Returns(true);
+
+        // Simulate what the fixed source generator produces for DerivedMissionModel:
+        // it now traverses the full inheritance hierarchy, so inherited properties from
+        // BaseMissionModel (MissionId, Name, IsActive) are included alongside IsJoined.
+        JadeDbMapperOptions.RegisterGlobalMapper<DerivedMissionModel>(reader =>
+        {
+            int __ord_MissionId = -1;
+            int __ord_Name      = -1;
+            int __ord_IsActive  = -1;
+            int __ord_IsJoined  = -1;
+            for (int __i = 0; __i < reader.FieldCount; __i++)
+            {
+                var __cn = reader.GetName(__i);
+                if (string.Equals(__cn, "mission_id", StringComparison.OrdinalIgnoreCase)) { __ord_MissionId = __i; continue; }
+                if (string.Equals(__cn, "name",       StringComparison.OrdinalIgnoreCase)) { __ord_Name      = __i; continue; }
+                if (string.Equals(__cn, "is_active",  StringComparison.OrdinalIgnoreCase)) { __ord_IsActive  = __i; continue; }
+                if (string.Equals(__cn, "is_joined",  StringComparison.OrdinalIgnoreCase)) { __ord_IsJoined  = __i; continue; }
+            }
+            return new DerivedMissionModel
+            {
+                MissionId = __ord_MissionId >= 0 ? reader.GetInt64(__ord_MissionId)                                              : default,
+                Name      = __ord_Name      >= 0 ? (reader.IsDBNull(__ord_Name) ? null : reader.GetString(__ord_Name))          : default!,
+                IsActive  = __ord_IsActive  >= 0 ? reader.GetBoolean(__ord_IsActive)                                            : default,
+                IsJoined  = __ord_IsJoined  >= 0 ? reader.GetBoolean(__ord_IsJoined)                                            : default,
+            };
+        });
+
+        var mapperOptions = new JadeDbMapperOptions();
+
+        // Act
+        var result = mapperOptions.ExecuteMapper<DerivedMissionModel>(mockReader.Object);
+
+        // Assert - both base and derived class properties must be populated
+        result.Should().NotBeNull();
+        result!.MissionId.Should().Be(42L,           "base class property should be mapped");
+        result.Name.Should().Be("Test Mission",       "base class property should be mapped");
+        result.IsActive.Should().BeTrue(              "base class property should be mapped");
+        result.IsJoined.Should().BeTrue(              "derived class property should be mapped");
+    }
+
+    /// <summary>
+    /// Test 7: Partial Column Selection
     /// Verifies that a source-generated mapper correctly handles queries that return only
     /// a subset of the model's columns (e.g. SELECT tempid FROM tbl_... instead of SELECT *).
     /// Missing columns must fall back to default values rather than throwing.
@@ -346,4 +409,25 @@ public partial class PartialColumnModel
     public long userid { get; set; }
     public string? formdata { get; set; }
     public bool is_active { get; set; }
+}
+
+// Models for inheritance test
+[JadeDbObject]
+public partial class BaseMissionModel
+{
+    [JadeDbColumn("mission_id")]
+    public long MissionId { get; set; }
+
+    [JadeDbColumn("name")]
+    public string Name { get; set; } = string.Empty;
+
+    [JadeDbColumn("is_active")]
+    public bool IsActive { get; set; }
+}
+
+[JadeDbObject]
+public partial class DerivedMissionModel : BaseMissionModel
+{
+    [JadeDbColumn("is_joined")]
+    public bool IsJoined { get; set; }
 }
