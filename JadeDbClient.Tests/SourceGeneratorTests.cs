@@ -295,7 +295,7 @@ public class SourceGeneratorTests
             return new DerivedMissionModel
             {
                 MissionId = __ord_MissionId >= 0 ? reader.GetInt64(__ord_MissionId)                                              : default,
-                Name      = __ord_Name      >= 0 ? (reader.IsDBNull(__ord_Name) ? null : reader.GetString(__ord_Name))          : default!,
+                Name      = __ord_Name      >= 0 ? (reader.IsDBNull(__ord_Name) ? default! : reader.GetString(__ord_Name))       : default!,
                 IsActive  = __ord_IsActive  >= 0 ? reader.GetBoolean(__ord_IsActive)                                            : default,
                 IsJoined  = __ord_IsJoined  >= 0 ? reader.GetBoolean(__ord_IsJoined)                                            : default,
             };

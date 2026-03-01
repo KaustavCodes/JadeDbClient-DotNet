@@ -238,7 +238,9 @@ namespace JadeDbClient.SourceGenerator
 
             if (p.IsNullable || !p.IsValueType)
             {
-                return $"{dbNull} ? null : {baseExpr}";
+                // For non-nullable reference types use default! to avoid CS8601; nullable types can use null.
+                string nullExpr = (!p.IsValueType && !p.IsNullable) ? "default!" : "null";
+                return $"{dbNull} ? {nullExpr} : {baseExpr}";
             }
 
             // Non-nullable value type
