@@ -97,6 +97,7 @@ namespace JadeDbClient.SourceGenerator
 
                 foreach (var model in models)
                 {
+                    if (model is null) continue; // skip any null entries, safety for nullable incremental provider
                     var settableProps = model.Properties.Where(p => p.HasPublicSetter).ToArray();
 
                     sb.AppendLine($"        JadeDbMapperOptions.RegisterGlobalMapper<{model.FullName}>(static (global::System.Data.IDataReader reader) =>");
