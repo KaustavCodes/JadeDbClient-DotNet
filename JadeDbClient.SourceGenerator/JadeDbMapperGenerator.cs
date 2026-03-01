@@ -97,6 +97,7 @@ namespace JadeDbClient.SourceGenerator
 
                 foreach (var model in models)
                 {
+                    if (model is null) continue; // skip any null entries, safety for nullable incremental provider
                     var settableProps = model.Properties.Where(p => p.HasPublicSetter).ToArray();
 
                     sb.AppendLine($"        JadeDbMapperOptions.RegisterGlobalMapper<{model.FullName}>(static (global::System.Data.IDataReader reader) =>");
@@ -238,7 +239,9 @@ namespace JadeDbClient.SourceGenerator
 
             if (p.IsNullable || !p.IsValueType)
             {
-                return $"{dbNull} ? null : {baseExpr}";
+                // For non-nullable reference types use default! to avoid CS8601; nullable types can use null.
+                string nullExpr = (!p.IsValueType && !p.IsNullable) ? "default!" : "null";
+                return $"{dbNull} ? {nullExpr} : {baseExpr}";
             }
 
             // Non-nullable value type
