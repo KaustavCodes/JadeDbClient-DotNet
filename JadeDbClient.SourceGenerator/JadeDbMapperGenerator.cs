@@ -39,8 +39,7 @@ namespace JadeDbClient.SourceGenerator
 
                         var columnAttrSymbol = ctx.SemanticModel.Compilation.GetTypeByMetadataName(ColumnAttributeFullName);
 
-                        var props = typeSymbol.GetMembers()
-                            .OfType<IPropertySymbol>()
+                        var props = GetAllPropertiesIncludingInherited(typeSymbol)
                             .Where(p => !p.IsStatic && !p.IsIndexer)
                             .Where(p => p.DeclaredAccessibility is Accessibility.Public or Accessibility.Internal)
                             .Where(p => p.SetMethod?.DeclaredAccessibility is Accessibility.Public or Accessibility.Internal or null)
@@ -147,6 +146,28 @@ namespace JadeDbClient.SourceGenerator
 
                 spc.AddSource("JadeDbMapperInitializer.g.cs", SourceText.From(sb.ToString(), Encoding.UTF8));
             });
+        }
+
+        /// <summary>
+        /// Returns all public instance properties declared on <paramref name="typeSymbol"/> and
+        /// all of its base types (up to, but not including, <c>System.Object</c>).
+        /// Properties declared on a derived type shadow those with the same name on a base type.
+        /// </summary>
+        private static IEnumerable<IPropertySymbol> GetAllPropertiesIncludingInherited(INamedTypeSymbol typeSymbol)
+        {
+            var seenNames = new HashSet<string>(StringComparer.Ordinal);
+            var current = typeSymbol;
+            while (current != null && current.SpecialType != SpecialType.System_Object)
+            {
+                foreach (var member in current.GetMembers().OfType<IPropertySymbol>())
+                {
+                    if (seenNames.Add(member.Name))
+                    {
+                        yield return member;
+                    }
+                }
+                current = current.BaseType;
+            }
         }
 
         private static void GenerateBulkInsertAccessor(StringBuilder sb, ModelToMap model)
