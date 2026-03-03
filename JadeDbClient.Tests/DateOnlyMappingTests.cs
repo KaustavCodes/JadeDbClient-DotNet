@@ -149,6 +149,97 @@ public class DateOnlyMappingTests
         result!.Id.Should().Be(10);
         result.EventDate.Should().Be(new DateOnly(2025, 1, 20));
     }
+
+    /// <summary>
+    /// Simulates the mapper registration pattern that the source generator would produce for a DateTimeOffset
+    /// property when the DB provider returns a DateTimeOffset value directly (e.g. SQL Server datetimeoffset).
+    /// The generator emits: reader.GetValue(ord) is DateTimeOffset dto ? dto : new DateTimeOffset(reader.GetDateTime(ord))
+    /// </summary>
+    [Fact]
+    public void SourceGeneratorMapper_DateTimeOffset_WhenDbReturnsDateTimeOffset_MappedCorrectly()
+    {
+        // Arrange
+        var expected = new DateTimeOffset(2025, 6, 15, 10, 30, 0, TimeSpan.FromHours(5));
+        var mockReader = new Mock<IDataReader>();
+        mockReader.Setup(r => r.FieldCount).Returns(2);
+        mockReader.Setup(r => r.GetName(0)).Returns("Id");
+        mockReader.Setup(r => r.GetName(1)).Returns("CreatedAt");
+        mockReader.Setup(r => r.IsDBNull(It.IsAny<int>())).Returns(false);
+        // DB provider returns DateTimeOffset from GetValue
+        mockReader.Setup(r => r.GetValue(1)).Returns(expected);
+
+        // Simulate the mapper emitted by the source generator for a DateTimeOffset property
+        JadeDbMapperOptions.RegisterGlobalMapper<EventWithDateTimeOffset>(reader =>
+        {
+            int __ord_Id = -1, __ord_CreatedAt = -1;
+            for (int __i = 0; __i < reader.FieldCount; __i++)
+            {
+                var __cn = reader.GetName(__i);
+                if (string.Equals(__cn, "Id",        StringComparison.OrdinalIgnoreCase)) { __ord_Id        = __i; continue; }
+                if (string.Equals(__cn, "CreatedAt", StringComparison.OrdinalIgnoreCase)) { __ord_CreatedAt = __i; continue; }
+            }
+            return new EventWithDateTimeOffset
+            {
+                Id        = __ord_Id        >= 0 ? reader.GetInt32(__ord_Id) : default,
+                CreatedAt = __ord_CreatedAt >= 0 ? (reader.GetValue(__ord_CreatedAt) is DateTimeOffset __dto_CreatedAt ? __dto_CreatedAt : new DateTimeOffset(reader.GetDateTime(__ord_CreatedAt))) : default,
+            };
+        });
+
+        var mapperOptions = new JadeDbMapperOptions();
+
+        // Act
+        var result = mapperOptions.ExecuteMapper<EventWithDateTimeOffset>(mockReader.Object);
+
+        // Assert
+        result.Should().NotBeNull();
+        result!.CreatedAt.Should().Be(expected);
+        result.CreatedAt.Offset.Should().Be(TimeSpan.FromHours(5));
+    }
+
+    /// <summary>
+    /// Simulates the mapper registration pattern that the source generator would produce for a DateTimeOffset
+    /// property when the DB provider returns a plain DateTime (e.g. MySQL, SQLite).
+    /// The generator emits: reader.GetValue(ord) is DateTimeOffset dto ? dto : new DateTimeOffset(reader.GetDateTime(ord))
+    /// </summary>
+    [Fact]
+    public void SourceGeneratorMapper_DateTimeOffset_WhenDbReturnsDateTime_FallsBackToConversion()
+    {
+        // Arrange
+        var dateTime = new DateTime(2025, 3, 1, 8, 0, 0);
+        var mockReader = new Mock<IDataReader>();
+        mockReader.Setup(r => r.FieldCount).Returns(2);
+        mockReader.Setup(r => r.GetName(0)).Returns("Id");
+        mockReader.Setup(r => r.GetName(1)).Returns("CreatedAt");
+        mockReader.Setup(r => r.IsDBNull(It.IsAny<int>())).Returns(false);
+        // DB provider returns DateTime from GetValue (fallback path)
+        mockReader.Setup(r => r.GetValue(1)).Returns(dateTime);
+        mockReader.Setup(r => r.GetDateTime(1)).Returns(dateTime);
+
+        JadeDbMapperOptions.RegisterGlobalMapper<EventWithDateTimeOffset2>(reader =>
+        {
+            int __ord_Id = -1, __ord_CreatedAt = -1;
+            for (int __i = 0; __i < reader.FieldCount; __i++)
+            {
+                var __cn = reader.GetName(__i);
+                if (string.Equals(__cn, "Id",        StringComparison.OrdinalIgnoreCase)) { __ord_Id        = __i; continue; }
+                if (string.Equals(__cn, "CreatedAt", StringComparison.OrdinalIgnoreCase)) { __ord_CreatedAt = __i; continue; }
+            }
+            return new EventWithDateTimeOffset2
+            {
+                Id        = __ord_Id        >= 0 ? reader.GetInt32(__ord_Id) : default,
+                CreatedAt = __ord_CreatedAt >= 0 ? (reader.GetValue(__ord_CreatedAt) is DateTimeOffset __dto_CreatedAt ? __dto_CreatedAt : new DateTimeOffset(reader.GetDateTime(__ord_CreatedAt))) : default,
+            };
+        });
+
+        var mapperOptions = new JadeDbMapperOptions();
+
+        // Act
+        var result = mapperOptions.ExecuteMapper<EventWithDateTimeOffset2>(mockReader.Object);
+
+        // Assert
+        result.Should().NotBeNull();
+        result!.CreatedAt.DateTime.Should().Be(dateTime);
+    }
 }
 
 // Test models
@@ -174,4 +265,18 @@ public class EventModel
 {
     public int Id { get; set; }
     public DateOnly EventDate { get; set; }
+}
+
+public class EventWithDateTimeOffset
+{
+    public int Id { get; set; }
+    public DateTimeOffset CreatedAt { get; set; }
+}
+
+// Separate class required: RegisterGlobalMapper<T> is keyed by type,
+// so each test that registers a mapper needs a distinct model class.
+public class EventWithDateTimeOffset2
+{
+    public int Id { get; set; }
+    public DateTimeOffset CreatedAt { get; set; }
 }
