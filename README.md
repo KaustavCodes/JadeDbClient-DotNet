@@ -1699,7 +1699,7 @@ var (sql, parameters) = new QueryBuilder<Product>(_dbService)
 
 ## 📚 Documentation
 - **[GitHub Repository](https://github.com/KaustavCodes/JadeDbClient-DotNet)** - Source code and issue tracker
-- **[Changelog](CHANGELOG.md)** - Version history and release notes
+- **[Changelog](https://github.com/KaustavCodes/JadeDbClient-DotNet/blob/main/CHANGELOG.md)** - Version history and release notes
 
 Happy Coding! 
 
