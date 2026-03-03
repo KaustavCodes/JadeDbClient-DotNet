@@ -1,5 +1,15 @@
 # JadeDbClient Changelog
 
+## [1.5.11] - 2026-03-03
+
+### Added
+- **`JadeDbColumn.IsIdentity`**: New property on `[JadeDbColumn]` attribute. Set `IsIdentity = true` on the primary-key / identity column so that `BuildInsert(returnIdentity: true)` returns the correct column name in the database-specific clause (`RETURNING <col>` for PostgreSQL, `OUTPUT INSERTED.<col>` for SQL Server, `SELECT LAST_INSERT_ID()` for MySQL). If no property carries `IsIdentity = true`, the builder falls back to the conventional column name `id`.
+
+### Changed
+- **Version bump** from 1.5.10 to 1.5.11.
+
+---
+
 ## [1.15.10] - 2026-03-03
 
 ### Changed

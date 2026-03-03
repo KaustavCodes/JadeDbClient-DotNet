@@ -331,10 +331,11 @@ public class QueryBuilder<T> where T : class
 
         if (returnIdentity)
         {
+            var identityCol = ReflectionHelper.GetIdentityColumnName(typeof(T));
             sql.Append(_dialect switch
             {
-                DatabaseDialect.PostgreSql => " RETURNING id",
-                DatabaseDialect.MsSql => " OUTPUT INSERTED.id",
+                DatabaseDialect.PostgreSql => $" RETURNING {identityCol}",
+                DatabaseDialect.MsSql => $" OUTPUT INSERTED.{identityCol}",
                 DatabaseDialect.MySql => "; SELECT LAST_INSERT_ID()",
                 _ => ""
             });

@@ -96,4 +96,28 @@ internal static class ReflectionHelper
                    .Where(p => p.CanRead && p.CanWrite)
                    .ToArray();
     }
+
+    /// <summary>
+    /// Returns the database column name for the identity / primary-key column of
+    /// <paramref name="type"/>.
+    /// <para>
+    /// The first public instance property decorated with
+    /// <c>[JadeDbColumn(IsIdentity = true)]</c> wins.  When no such property exists
+    /// the method falls back to the conventional name <c>id</c>.
+    /// </para>
+    /// </summary>
+    internal static string GetIdentityColumnName(Type type)
+    {
+        var identityProp = type
+            .GetProperties(BindingFlags.Public | BindingFlags.Instance)
+            .FirstOrDefault(p =>
+            {
+                var attr = p.GetCustomAttribute<JadeDbColumnAttribute>();
+                return attr?.IsIdentity == true;
+            });
+
+        return identityProp != null
+            ? GetColumnName(identityProp)
+            : "id";
+    }
 }

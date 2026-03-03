@@ -17,6 +17,7 @@
 - **🚀 Source Generator for AOT**: Automatically generates optimized mappers at compile-time with the `[JadeDbObject]` attribute - no manual registration needed!
 - **Custom Column Mapping**: Use `[JadeDbColumn]` attribute to map database column names (e.g., snake_case) to C# property names (e.g., PascalCase).
 - **Exclude Columns from INSERT/UPDATE**: Mark database-managed columns (e.g. IDENTITY, AUTO_INCREMENT) with `[JadeDbColumn(IgnoreOnInsert = true)]` to automatically exclude them from INSERT and UPDATE statements.
+- **Identity Column for Returned Keys**: Mark the primary-key / identity column with `[JadeDbColumn(IsIdentity = true)]` so `BuildInsert(returnIdentity: true)` uses the correct column name in the database-specific RETURNING / OUTPUT clause. Falls back to `id` when no property is marked.
 - **Custom Table Mapping**: Use `[JadeDbTable]` attribute to map a C# class to a custom database table name.
 - **Native AOT Compatible**: Designed for .NET Native AOT applications with compile-time code generation (Note: Underlying database drivers may still have AOT limitations).
 - **Consistent API**: Provides a unified API to eliminate the headaches of switching databases.
@@ -1334,7 +1335,8 @@ using JadeDbClient.Attributes;
 public class Product
 {
     // Database generates this value — excluded from INSERT and UPDATE automatically.
-    [JadeDbColumn(IgnoreOnInsert = true)]
+    // IsIdentity = true tells BuildInsert(returnIdentity: true) which column to return.
+    [JadeDbColumn(IgnoreOnInsert = true, IsIdentity = true)]
     public int Id { get; set; }
 
     [JadeDbColumn("product_name")]
@@ -1348,6 +1350,8 @@ public class Product
 ```
 
 > **No conventions are assumed.** Unless a property is explicitly decorated with `[JadeDbColumn(IgnoreOnInsert = true)]`, it will always be included in INSERT and UPDATE statements. This keeps every schema flexible — models without auto-generated keys work without any special configuration.
+
+> **`IsIdentity`**: When calling `BuildInsert(returnIdentity: true)`, the builder looks for the first property decorated with `[JadeDbColumn(IsIdentity = true)]` to determine which column name appears in the database-specific identity clause (`RETURNING <col>` for PostgreSQL, `OUTPUT INSERTED.<col>` for SQL Server, `SELECT LAST_INSERT_ID()` for MySQL). If no property carries `IsIdentity = true`, the fallback is the column name `id`.
 
 ### SELECT
 

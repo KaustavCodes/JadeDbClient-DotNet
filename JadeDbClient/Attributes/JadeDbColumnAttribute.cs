@@ -32,6 +32,15 @@ public sealed class JadeDbColumnAttribute : Attribute
     public bool IgnoreOnInsert { get; set; }
 
     /// <summary>
+    /// When <c>true</c> this column is the identity / primary-key column whose value is
+    /// returned by <c>BuildInsert(returnIdentity: true)</c>.  Only the first property
+    /// decorated with <c>IsIdentity = true</c> is used; if no property carries this flag
+    /// the builder falls back to the conventional column name <c>id</c>.
+    /// Defaults to <c>false</c>.
+    /// </summary>
+    public bool IsIdentity { get; set; }
+
+    /// <summary>
     /// Marks the property with a custom column name.
     /// </summary>
     /// <param name="columnName">The name of the database column.</param>
