@@ -312,7 +312,7 @@ public class QueryBuilder<T> where T : class
     public (string Sql, IEnumerable<IDbDataParameter> Parameters) BuildInsert(T entity, bool returnIdentity = false)
     {
         var props = ReflectionHelper.GetMappableProperties(typeof(T))
-            .Where(p => !ReflectionHelper.IsAutoIncrementProperty(p) && p.CanWrite)
+            .Where(p => !ReflectionHelper.IsIgnoredOnInsert(p) && p.CanWrite)
             .ToArray();
 
         var columns = ReflectionHelper.GetColumnNames(props);
@@ -350,7 +350,7 @@ public class QueryBuilder<T> where T : class
             throw new InvalidOperationException("WHERE clause is required for UPDATE operations.");
 
         var props = ReflectionHelper.GetMappableProperties(typeof(T))
-            .Where(p => !ReflectionHelper.IsAutoIncrementProperty(p) && p.CanWrite)
+            .Where(p => !ReflectionHelper.IsIgnoredOnInsert(p) && p.CanWrite)
             .ToArray();
 
         var setClauses = new List<string>();

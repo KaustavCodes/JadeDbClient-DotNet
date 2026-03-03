@@ -27,16 +27,16 @@ internal static class ReflectionHelper
     /// statements because its value is managed by the database (auto-increment / identity /
     /// computed default).
     /// <para>
-    /// A property is only considered auto-increment when it is explicitly decorated with
-    /// <c>[JadeDbColumn(IsAutoIncrement = true)]</c>.  There is no name-based convention
+    /// A property is only excluded when it is explicitly decorated with
+    /// <c>[JadeDbColumn(IgnoreOnInsert = true)]</c>.  There is no name-based convention
     /// so that tables without a database-generated key work without any extra configuration.
     /// </para>
     /// </summary>
-    internal static bool IsAutoIncrementProperty(PropertyInfo property)
+    internal static bool IsIgnoredOnInsert(PropertyInfo property)
     {
         var attr = property.GetCustomAttribute<JadeDbColumnAttribute>();
         // Only the explicit attribute flag controls this – no name conventions.
-        return attr?.IsAutoIncrement ?? false;
+        return attr?.IgnoreOnInsert ?? false;
     }
 
     /// <summary>

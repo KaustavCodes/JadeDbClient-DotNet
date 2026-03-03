@@ -10,10 +10,10 @@ namespace JadeDbClient.Attributes;
 /// Usage examples:
 /// <code>
 /// [JadeDbColumn("user_name")]                       // column rename only
-/// [JadeDbColumn("id", IsAutoIncrement = true)]      // rename + auto-increment
-/// [JadeDbColumn(IsAutoIncrement = true)]            // auto-increment, keep property name as column
+/// [JadeDbColumn("id", IgnoreOnInsert = true)]       // rename + exclude from INSERT/UPDATE
+/// [JadeDbColumn(IgnoreOnInsert = true)]             // exclude from INSERT/UPDATE, keep property name as column
 /// </code>
-/// Properties decorated with <c>IsAutoIncrement = true</c> are automatically
+/// Properties decorated with <c>IgnoreOnInsert = true</c> are automatically
 /// omitted from INSERT and UPDATE statements built by <see cref="JadeDbClient.Helpers.QueryBuilder{T}"/>.
 /// </remarks>
 [AttributeUsage(AttributeTargets.Property, Inherited = true, AllowMultiple = false)]
@@ -29,7 +29,7 @@ public sealed class JadeDbColumnAttribute : Attribute
     /// computed default) and will be excluded from INSERT and UPDATE statements.
     /// Defaults to <c>false</c>.
     /// </summary>
-    public bool IsAutoIncrement { get; set; }
+    public bool IgnoreOnInsert { get; set; }
 
     /// <summary>
     /// Marks the property with a custom column name.

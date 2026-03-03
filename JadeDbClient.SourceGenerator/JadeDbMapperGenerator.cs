@@ -22,7 +22,7 @@ namespace JadeDbClient.SourceGenerator
     {
         private const string AttributeFullName = "JadeDbClient.Attributes.JadeDbObjectAttribute";
         private const string ColumnAttributeFullName = "JadeDbClient.Attributes.JadeDbColumnAttribute";
-        private const string IsAutoIncrementPropertyName = "IsAutoIncrement";
+        private const string IgnoreOnInsertPropertyName = "IgnoreOnInsert";
 
         public void Initialize(IncrementalGeneratorInitializationContext context)
         {
@@ -47,7 +47,7 @@ namespace JadeDbClient.SourceGenerator
                             .Select(p =>
                             {
                                 string columnName = p.Name;
-                                bool isAutoIncrement = false;
+                                bool ignoreOnInsert = false;
 
                                 var colAttr = p.GetAttributes().FirstOrDefault(a =>
                                     columnAttrSymbol != null && SymbolEqualityComparer.Default.Equals(a.AttributeClass, columnAttrSymbol));
@@ -61,19 +61,19 @@ namespace JadeDbClient.SourceGenerator
                                         columnName = cn;
                                     }
 
-                                    // Read IsAutoIncrement from named argument
+                                    // Read IgnoreOnInsert from named argument
                                     foreach (var namedArg in colAttr.NamedArguments)
                                     {
-                                        if (namedArg.Key == IsAutoIncrementPropertyName &&
+                                        if (namedArg.Key == IgnoreOnInsertPropertyName &&
                                             namedArg.Value.Value is bool b)
                                         {
-                                            isAutoIncrement = b;
+                                            ignoreOnInsert = b;
                                         }
                                     }
                                 }
-                                // No attribute: property is NOT auto-increment by default.
-                                // Auto-increment must be explicitly declared via
-                                // [JadeDbColumn(IsAutoIncrement = true)].
+                                // No attribute: property is included in INSERT/UPDATE by default.
+                                // Exclusion must be explicitly declared via
+                                // [JadeDbColumn(IgnoreOnInsert = true)].
 
                                 return new PropertyToMap(
                                     Name: p.Name,
@@ -84,7 +84,7 @@ namespace JadeDbClient.SourceGenerator
                                     IsEnum: p.Type.TypeKind == TypeKind.Enum,
                                     HasPublicSetter: p.SetMethod?.DeclaredAccessibility is Accessibility.Public or Accessibility.Internal,
                                     HasPublicGetter: p.GetMethod?.DeclaredAccessibility is Accessibility.Public or Accessibility.Internal,
-                                    IsAutoIncrement: isAutoIncrement
+                                    IgnoreOnInsert: ignoreOnInsert
                                 );
                             })
                             .ToImmutableArray();
@@ -197,7 +197,7 @@ namespace JadeDbClient.SourceGenerator
             // For bulk insert, we need properties with public getters (to read values from objects)
             // Auto-increment (identity / computed) columns are excluded – the DB provides their values.
             var readableProps = model.Properties
-                .Where(p => p.HasPublicGetter && !p.IsAutoIncrement)
+                .Where(p => p.HasPublicGetter && !p.IgnoreOnInsert)
                 .ToArray();
             if (readableProps.Length == 0) return;
 
@@ -305,7 +305,7 @@ namespace JadeDbClient.SourceGenerator
             bool IsEnum,
             bool HasPublicSetter,
             bool HasPublicGetter,
-            bool IsAutoIncrement);
+            bool IgnoreOnInsert);
 
         private record ModelToMap(
             string FullName,
