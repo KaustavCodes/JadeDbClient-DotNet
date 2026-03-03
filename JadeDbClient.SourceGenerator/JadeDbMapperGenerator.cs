@@ -217,8 +217,8 @@ namespace JadeDbClient.SourceGenerator
                     // New: DateOnly (convert from DateTime returned by most DB providers)
                     "global::System.DateOnly" => $"global::System.DateOnly.FromDateTime(reader.GetDateTime({ord}))",
 
-                    // New: DateTimeOffset
-                    "global::System.DateTimeOffset" => $"reader.GetDateTimeOffset({ord})",
+                    // New: DateTimeOffset (IDataReader has no GetDateTimeOffset; use GetValue with fallback)
+                    "global::System.DateTimeOffset" => $"reader.GetValue({ord}) is global::System.DateTimeOffset __dto_{p.Name} ? __dto_{p.Name} : new global::System.DateTimeOffset(reader.GetDateTime({ord}))",
 
                     // New: TimeSpan (SQL 'time' type)
                     "global::System.TimeSpan" => $"reader.GetFieldValue<global::System.TimeSpan>({ord})", // or GetValue + cast if needed
