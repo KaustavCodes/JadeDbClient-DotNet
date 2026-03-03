@@ -22,6 +22,7 @@ namespace JadeDbClient.SourceGenerator
     {
         private const string AttributeFullName = "JadeDbClient.Attributes.JadeDbObjectAttribute";
         private const string ColumnAttributeFullName = "JadeDbClient.Attributes.JadeDbColumnAttribute";
+        private const string IsAutoIncrementPropertyName = "IsAutoIncrement";
 
         public void Initialize(IncrementalGeneratorInitializationContext context)
         {
@@ -46,14 +47,33 @@ namespace JadeDbClient.SourceGenerator
                             .Select(p =>
                             {
                                 string columnName = p.Name;
+                                bool isAutoIncrement = false;
+
                                 var colAttr = p.GetAttributes().FirstOrDefault(a =>
                                     columnAttrSymbol != null && SymbolEqualityComparer.Default.Equals(a.AttributeClass, columnAttrSymbol));
 
-                                if (colAttr?.ConstructorArguments.Length > 0 &&
-                                    colAttr.ConstructorArguments[0].Value is string cn)
+                                if (colAttr != null)
                                 {
-                                    columnName = cn;
+                                    // Read column name from constructor argument (if provided)
+                                    if (colAttr.ConstructorArguments.Length > 0 &&
+                                        colAttr.ConstructorArguments[0].Value is string cn)
+                                    {
+                                        columnName = cn;
+                                    }
+
+                                    // Read IsAutoIncrement from named argument
+                                    foreach (var namedArg in colAttr.NamedArguments)
+                                    {
+                                        if (namedArg.Key == IsAutoIncrementPropertyName &&
+                                            namedArg.Value.Value is bool b)
+                                        {
+                                            isAutoIncrement = b;
+                                        }
+                                    }
                                 }
+                                // No attribute: property is NOT auto-increment by default.
+                                // Auto-increment must be explicitly declared via
+                                // [JadeDbColumn(IsAutoIncrement = true)].
 
                                 return new PropertyToMap(
                                     Name: p.Name,
@@ -63,7 +83,8 @@ namespace JadeDbClient.SourceGenerator
                                     IsNullable: p.NullableAnnotation == NullableAnnotation.Annotated,
                                     IsEnum: p.Type.TypeKind == TypeKind.Enum,
                                     HasPublicSetter: p.SetMethod?.DeclaredAccessibility is Accessibility.Public or Accessibility.Internal,
-                                    HasPublicGetter: p.GetMethod?.DeclaredAccessibility is Accessibility.Public or Accessibility.Internal
+                                    HasPublicGetter: p.GetMethod?.DeclaredAccessibility is Accessibility.Public or Accessibility.Internal,
+                                    IsAutoIncrement: isAutoIncrement
                                 );
                             })
                             .ToImmutableArray();
@@ -174,7 +195,10 @@ namespace JadeDbClient.SourceGenerator
         private static void GenerateBulkInsertAccessor(StringBuilder sb, ModelToMap model)
         {
             // For bulk insert, we need properties with public getters (to read values from objects)
-            var readableProps = model.Properties.Where(p => p.HasPublicGetter).ToArray();
+            // Auto-increment (identity / computed) columns are excluded – the DB provides their values.
+            var readableProps = model.Properties
+                .Where(p => p.HasPublicGetter && !p.IsAutoIncrement)
+                .ToArray();
             if (readableProps.Length == 0) return;
 
             sb.AppendLine($"        JadeDbMapperOptions.RegisterBulkInsertAccessor<{model.FullName}>(");
@@ -280,7 +304,8 @@ namespace JadeDbClient.SourceGenerator
             bool IsNullable,
             bool IsEnum,
             bool HasPublicSetter,
-            bool HasPublicGetter);
+            bool HasPublicGetter,
+            bool IsAutoIncrement);
 
         private record ModelToMap(
             string FullName,

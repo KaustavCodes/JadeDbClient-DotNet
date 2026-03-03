@@ -18,7 +18,25 @@ internal static class ReflectionHelper
     internal static string GetColumnName(PropertyInfo property)
     {
         var columnAttribute = property.GetCustomAttribute<JadeDbColumnAttribute>();
+        // ColumnName may be null when the attribute is used purely to set IsAutoIncrement
         return columnAttribute?.ColumnName ?? property.Name;
+    }
+
+    /// <summary>
+    /// Returns <c>true</c> when the property should be excluded from INSERT and UPDATE
+    /// statements because its value is managed by the database (auto-increment / identity /
+    /// computed default).
+    /// <para>
+    /// A property is only considered auto-increment when it is explicitly decorated with
+    /// <c>[JadeDbColumn(IsAutoIncrement = true)]</c>.  There is no name-based convention
+    /// so that tables without a database-generated key work without any extra configuration.
+    /// </para>
+    /// </summary>
+    internal static bool IsAutoIncrementProperty(PropertyInfo property)
+    {
+        var attr = property.GetCustomAttribute<JadeDbColumnAttribute>();
+        // Only the explicit attribute flag controls this – no name conventions.
+        return attr?.IsAutoIncrement ?? false;
     }
 
     /// <summary>

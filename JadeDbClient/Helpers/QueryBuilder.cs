@@ -248,9 +248,9 @@ public class QueryBuilder<T> where T : class
         var joinKeyword = joinType switch
         {
             JoinType.Inner => "INNER JOIN",
-            JoinType.Left  => "LEFT JOIN",
+            JoinType.Left => "LEFT JOIN",
             JoinType.Right => "RIGHT JOIN",
-            JoinType.Full  => "FULL JOIN",
+            JoinType.Full => "FULL JOIN",
             _ => throw new ArgumentOutOfRangeException(nameof(joinType))
         };
 
@@ -308,11 +308,11 @@ public class QueryBuilder<T> where T : class
         return (sb.ToString(), _parameters);
     }
 
-    // ── Build INSERT ── (unchanged)
+    // ── Build INSERT ──
     public (string Sql, IEnumerable<IDbDataParameter> Parameters) BuildInsert(T entity, bool returnIdentity = false)
     {
         var props = ReflectionHelper.GetMappableProperties(typeof(T))
-            .Where(p => p.Name != "Id" && p.CanWrite)
+            .Where(p => !ReflectionHelper.IsAutoIncrementProperty(p) && p.CanWrite)
             .ToArray();
 
         var columns = ReflectionHelper.GetColumnNames(props);
@@ -343,14 +343,14 @@ public class QueryBuilder<T> where T : class
         return (sql.ToString(), _parameters);
     }
 
-    // ── Build UPDATE ── (unchanged)
+    // ── Build UPDATE ──
     public (string Sql, IEnumerable<IDbDataParameter> Parameters) BuildUpdate(T entity)
     {
         if (_whereExpression == null)
             throw new InvalidOperationException("WHERE clause is required for UPDATE operations.");
 
         var props = ReflectionHelper.GetMappableProperties(typeof(T))
-            .Where(p => p.Name != "Id" && p.CanWrite)
+            .Where(p => !ReflectionHelper.IsAutoIncrementProperty(p) && p.CanWrite)
             .ToArray();
 
         var setClauses = new List<string>();
@@ -402,7 +402,7 @@ public class QueryBuilder<T> where T : class
     public async Task<IEnumerable<TResult>> ToListAsync<
         [DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicProperties |
                                     DynamicallyAccessedMemberTypes.PublicParameterlessConstructor)]
-        TResult>() where TResult : class
+    TResult>() where TResult : class
     {
         var (sql, parameters) = BuildSelect();
         return await _dbService.ExecuteQueryAsync<TResult>(sql, parameters);
@@ -450,7 +450,7 @@ public class QueryBuilder<T> where T : class
     public async Task<TResult?> FirstOrDefaultAsync<
         [DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicProperties |
                                     DynamicallyAccessedMemberTypes.PublicParameterlessConstructor)]
-        TResult>() where TResult : class
+    TResult>() where TResult : class
     {
         var (sql, parameters) = BuildSelect();
         return await _dbService.ExecuteQueryFirstRowAsync<TResult>(sql, parameters);
@@ -478,7 +478,48 @@ public class QueryBuilder<T> where T : class
         var (sql, parameters) = BuildSelect();
         return await _dbService.ExecuteQueryFirstRowDynamicAsync(sql, parameters);
     }
+    /// <summary>
+    /// Builds and executes a <c>SELECT COUNT(*)</c> query, respecting any
+    /// <see cref="Where"/> filter and JOIN clauses already configured on this builder.
+    /// </summary>
+    /// <returns>
+    /// The number of rows that match the current filter.  Returns 0 when the
+    /// table is empty or no rows satisfy the WHERE condition.
+    /// </returns>
+    /// <remarks>
+    /// The SELECT and ORDER BY / paging clauses that may have been configured are
+    /// ignored – only the FROM, JOIN, and WHERE portions are used.
+    /// </remarks>
+    public async Task<long> CountAsync()
+    {
+        // Build a fresh parameter list so we don't mutate the shared _parameters list.
+        // Clone the current WHERE parameters by running AppendWhere on a throw-away builder.
+        var sb = new StringBuilder("SELECT COUNT(*) FROM ").Append(_tableName);
 
+        // Collect JOIN parameters into a temporary list so the count query is self-contained.
+        var countParams = new List<IDbDataParameter>();
+        foreach (var (joinSql, joinParams) in _joins)
+        {
+            sb.Append(' ').Append(joinSql);
+            countParams.AddRange(joinParams);
+        }
+
+        if (_whereExpression != null)
+        {
+            var tablePrefix = _joins.Count > 0 ? _tableName : null;
+            var visitor = new ExpressionToSqlVisitor<T>(_dbService, tablePrefix);
+            var (whereClause, whereParams) = visitor.Translate(_whereExpression);
+
+            if (!string.IsNullOrWhiteSpace(whereClause))
+            {
+                sb.Append(" WHERE ").Append(whereClause);
+                countParams.AddRange(whereParams);
+            }
+        }
+
+        var result = await _dbService.ExecuteScalar<long>(sb.ToString(), countParams);
+        return result;
+    }
     private void AppendWhere(StringBuilder sb)
     {
         if (_whereExpression == null) return;
@@ -621,7 +662,7 @@ public class QueryBuilder<T> where T : class
         string joinTableName)
     {
         var mainParam = selector.Parameters[0];
-        var joinParam  = selector.Parameters[1];
+        var joinParam = selector.Parameters[1];
 
         string QualifyMember(MemberExpression memberExpr)
         {
