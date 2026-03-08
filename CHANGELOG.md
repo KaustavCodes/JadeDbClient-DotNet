@@ -1,5 +1,24 @@
 # JadeDbClient Changelog
 
+## [1.5.12] - 2026-03-08
+
+### Fixed
+- **Connection pool exhaustion** (`53300: remaining connection slots are reserved for roles with the SUPERUSER attribute` and equivalent errors on MySQL/SQL Server): Four root causes have been eliminated across all three database providers (PostgreSQL, MySQL, SQL Server).
+  1. **`OpenConnection()` orphaning connections** — Calling `OpenConnection()` a second time no longer silently replaces the stored `Connection` reference. The previous connection is now `Dispose()`d before a new one is created.
+  2. **`CloseConnection()` failing to release broken connections** — The method previously only called `Close()` when `ConnectionState.Open`, silently ignoring `Broken`/`Connecting`/other states. It now unconditionally calls `Dispose()` on the stored connection and sets the reference to `null`, guaranteeing the connection slot is returned to the pool in all cases.
+  3. **No `IDisposable` on service classes** — Without `IDisposable`, exceptions thrown between `OpenConnection()` / `BeginTransaction()` and `CloseConnection()` left the connection permanently open. All three service classes now implement `IDisposable`, delegating to `CloseConnection()` so that `using` blocks and DI scopes clean up automatically.
+  4. **`ExecuteQueryFirstRowAsync` and `ExecuteQueryFirstRowDynamicAsync` holding connections with unconsumed result sets** — Both methods opened a full result-set reader and returned after reading only the first row. The driver then had to cancel the in-flight server query and wait for the cancellation to complete before returning the connection to the pool. Under load, this caused dozens of connections to sit in cancellation-pending state, exhausting the pool. Both methods now open the reader with `CommandBehavior.SingleRow`, which tells the server to produce at most one row — the result set is fully consumed on the first read and the connection is returned to the pool immediately.
+
+### Performance
+- **Eliminated thread-pool starvation in all async query methods** — All data-reader loops and single-row reads across `ExecuteQueryAsync`, `ExecuteQueryFirstRowAsync`, `ExecuteQueryDynamicAsync`, `ExecuteQueryFirstRowDynamicAsync`, and `ExecuteStoredProcedureSelectDataAsync` now use `await reader.ReadAsync()` instead of the blocking `reader.Read()`. Under high concurrency the old synchronous reads held thread-pool threads hostage, causing requests to queue and connections to pile up.
+- **Async `connection.Open()` → `OpenAsync()` in all async methods** — `ExecuteScalar` and the PostgreSQL `InsertDataTable` / `InsertDataTableWithJsonData` methods previously called the synchronous `connection.Open()` inside `async Task` methods. These are now fully asynchronous, avoiding unnecessary thread-pool blocking.
+
+### Changed
+- **`IDatabaseService` now extends `IDisposable`** — Existing consuming code is not affected unless it wraps the service in a `using` block (which is now supported and encouraged for the `OpenConnection`/transaction pattern).
+- **Version bump** from 1.5.11 to 1.5.12.
+
+---
+
 ## [1.5.11] - 2026-03-03
 
 ### Added

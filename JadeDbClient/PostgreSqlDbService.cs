@@ -16,6 +16,7 @@ public class PostgreSqlDbService : IDatabaseService
     private readonly JadeDbMapperOptions _mapperOptions;
     private readonly JadeDbServiceRegistration.JadeDbServiceOptions _serviceOptions;
     private readonly Mapper _mapper;
+    private bool _disposed;
 
     public IDbConnection? Connection { get; set; }
 
@@ -63,6 +64,11 @@ public class PostgreSqlDbService : IDatabaseService
     /// </summary>
     public void OpenConnection()
     {
+        if (Connection != null)
+        {
+            Connection.Dispose();
+            Connection = null;
+        }
         Connection = new NpgsqlConnection(_connectionString);
         Connection.Open();
     }
@@ -72,9 +78,20 @@ public class PostgreSqlDbService : IDatabaseService
     /// </summary>
     public void CloseConnection()
     {
-        if (Connection != null && Connection.State == ConnectionState.Open)
+        if (Connection != null)
         {
-            Connection.Close();
+            Connection.Dispose();
+            Connection = null;
+        }
+    }
+
+    /// <inheritdoc/>
+    public void Dispose()
+    {
+        if (!_disposed)
+        {
+            CloseConnection();
+            _disposed = true;
         }
     }
 
@@ -127,7 +144,7 @@ public class PostgreSqlDbService : IDatabaseService
 
                 using (var reader = await command.ExecuteReaderAsync())
                 {
-                    while (reader.Read())
+                    while (await reader.ReadAsync())
                     {
                         results.Add(_mapper.MapObject<T>(reader));
                     }
@@ -167,9 +184,9 @@ public class PostgreSqlDbService : IDatabaseService
                     }
                 }
 
-                using (var reader = await command.ExecuteReaderAsync())
+                using (var reader = await command.ExecuteReaderAsync(CommandBehavior.SingleRow))
                 {
-                    if (reader.Read())
+                    if (await reader.ReadAsync())
                     {
                         var result = _mapper.MapObject<T>(reader);
                         if (_serviceOptions.EnableLogging)
@@ -210,7 +227,7 @@ public class PostgreSqlDbService : IDatabaseService
 
                 using (var reader = await command.ExecuteReaderAsync())
                 {
-                    while (reader.Read())
+                    while (await reader.ReadAsync())
                         results.Add(_mapper.MapDynamic(reader));
                 }
             }
@@ -238,9 +255,9 @@ public class PostgreSqlDbService : IDatabaseService
                         command.Parameters.Add(parameter);
                 }
 
-                using (var reader = await command.ExecuteReaderAsync())
+                using (var reader = await command.ExecuteReaderAsync(CommandBehavior.SingleRow))
                 {
-                    if (reader.Read())
+                    if (await reader.ReadAsync())
                     {
                         var result = _mapper.MapDynamic(reader);
                         if (_serviceOptions.EnableLogging)
@@ -266,7 +283,7 @@ public class PostgreSqlDbService : IDatabaseService
     {
         using (var connection = new NpgsqlConnection(_connectionString))
         {
-            connection.Open();
+            await connection.OpenAsync();
             long startTimestamp = _serviceOptions.EnableLogging ? Stopwatch.GetTimestamp() : 0;
 
             using (var command = new NpgsqlCommand(query, connection))
@@ -328,7 +345,7 @@ public class PostgreSqlDbService : IDatabaseService
 
                 using (var reader = await command.ExecuteReaderAsync())
                 {
-                    while (reader.Read())
+                    while (await reader.ReadAsync())
                     {
                         results.Add(_mapper.MapObject<T>(reader));
                     }
@@ -469,7 +486,7 @@ public class PostgreSqlDbService : IDatabaseService
     public async Task<bool> InsertDataTable(string tableName, DataTable dataTable)
     {
         using var connection = new NpgsqlConnection(_connectionString);
-        connection.Open();
+        await connection.OpenAsync();
 
         long startTimestamp = _serviceOptions.EnableLogging ? Stopwatch.GetTimestamp() : 0;
 
@@ -506,7 +523,7 @@ public class PostgreSqlDbService : IDatabaseService
     public async Task<bool> InsertDataTableWithJsonData(string tableName, DataTable dataTable)
     {
         using var connection = new NpgsqlConnection(_connectionString);
-        connection.Open();
+        await connection.OpenAsync();
 
         long startTimestamp = _serviceOptions.EnableLogging ? Stopwatch.GetTimestamp() : 0;
 
