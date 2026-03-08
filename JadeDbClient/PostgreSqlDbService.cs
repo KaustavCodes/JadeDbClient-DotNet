@@ -184,7 +184,7 @@ public class PostgreSqlDbService : IDatabaseService
                     }
                 }
 
-                using (var reader = await command.ExecuteReaderAsync())
+                using (var reader = await command.ExecuteReaderAsync(CommandBehavior.SingleRow))
                 {
                     if (await reader.ReadAsync())
                     {
@@ -255,7 +255,7 @@ public class PostgreSqlDbService : IDatabaseService
                         command.Parameters.Add(parameter);
                 }
 
-                using (var reader = await command.ExecuteReaderAsync())
+                using (var reader = await command.ExecuteReaderAsync(CommandBehavior.SingleRow))
                 {
                     if (await reader.ReadAsync())
                     {

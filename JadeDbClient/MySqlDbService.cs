@@ -185,7 +185,7 @@ public class MySqlDbService : IDatabaseService
                     }
                 }
 
-                using (var reader = await command.ExecuteReaderAsync())
+                using (var reader = await command.ExecuteReaderAsync(CommandBehavior.SingleRow))
                 {
                     if (await reader.ReadAsync())
                     {
@@ -256,7 +256,7 @@ public class MySqlDbService : IDatabaseService
                         command.Parameters.Add(parameter);
                 }
 
-                using (var reader = await command.ExecuteReaderAsync())
+                using (var reader = await command.ExecuteReaderAsync(CommandBehavior.SingleRow))
                 {
                     if (await reader.ReadAsync())
                     {

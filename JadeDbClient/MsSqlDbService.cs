@@ -188,7 +188,7 @@ public class MsSqlDbService : IDatabaseService
                     }
                 }
 
-                using (var reader = await command.ExecuteReaderAsync())
+                using (var reader = await command.ExecuteReaderAsync(CommandBehavior.SingleRow))
                 {
                     if (await reader.ReadAsync())
                     {
@@ -255,7 +255,7 @@ public class MsSqlDbService : IDatabaseService
                         command.Parameters.Add(parameter);
                 }
 
-                using (var reader = await command.ExecuteReaderAsync())
+                using (var reader = await command.ExecuteReaderAsync(CommandBehavior.SingleRow))
                 {
                     if (await reader.ReadAsync())
                     {
