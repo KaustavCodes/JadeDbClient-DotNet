@@ -4,7 +4,7 @@ using JadeDbClient.Enums;
 
 namespace JadeDbClient.Interfaces;
 
-public interface IDatabaseService
+public interface IDatabaseService : IDisposable
 {
     DatabaseDialect Dialect { get; }
 

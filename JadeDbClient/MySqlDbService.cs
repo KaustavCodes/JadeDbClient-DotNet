@@ -15,6 +15,7 @@ public class MySqlDbService : IDatabaseService
     private readonly string _connectionString;
     private readonly JadeDbMapperOptions _mapperOptions;
     private readonly JadeDbServiceRegistration.JadeDbServiceOptions _serviceOptions;
+    private bool _disposed;
 
     public IDbConnection? Connection { get; set; }
 
@@ -64,6 +65,11 @@ public class MySqlDbService : IDatabaseService
     /// </summary>
     public void OpenConnection()
     {
+        if (Connection != null)
+        {
+            Connection.Dispose();
+            Connection = null;
+        }
         Connection = new MySqlConnection(_connectionString);
         Connection.Open();
     }
@@ -73,9 +79,20 @@ public class MySqlDbService : IDatabaseService
     /// </summary>
     public void CloseConnection()
     {
-        if (Connection != null && Connection.State == ConnectionState.Open)
+        if (Connection != null)
         {
-            Connection.Close();
+            Connection.Dispose();
+            Connection = null;
+        }
+    }
+
+    /// <inheritdoc/>
+    public void Dispose()
+    {
+        if (!_disposed)
+        {
+            CloseConnection();
+            _disposed = true;
         }
     }
 
@@ -128,7 +145,7 @@ public class MySqlDbService : IDatabaseService
 
                 using (var reader = await command.ExecuteReaderAsync())
                 {
-                    while (reader.Read())
+                    while (await reader.ReadAsync())
                     {
                         results.Add(_mapper.MapObject<T>(reader));
                     }
@@ -170,7 +187,7 @@ public class MySqlDbService : IDatabaseService
 
                 using (var reader = await command.ExecuteReaderAsync())
                 {
-                    if (reader.Read())
+                    if (await reader.ReadAsync())
                     {
                         var result = _mapper.MapObject<T>(reader);
                         if (_serviceOptions.EnableLogging)
@@ -211,7 +228,7 @@ public class MySqlDbService : IDatabaseService
 
                 using (var reader = await command.ExecuteReaderAsync())
                 {
-                    while (reader.Read())
+                    while (await reader.ReadAsync())
                         results.Add(_mapper.MapDynamic(reader));
                 }
             }
@@ -241,7 +258,7 @@ public class MySqlDbService : IDatabaseService
 
                 using (var reader = await command.ExecuteReaderAsync())
                 {
-                    if (reader.Read())
+                    if (await reader.ReadAsync())
                     {
                         var result = _mapper.MapDynamic(reader);
                         if (_serviceOptions.EnableLogging)
@@ -267,7 +284,7 @@ public class MySqlDbService : IDatabaseService
     {
         using (var connection = new MySqlConnection(_connectionString))
         {
-            connection.Open();
+            await connection.OpenAsync();
             long startTimestamp = _serviceOptions.EnableLogging ? Stopwatch.GetTimestamp() : 0;
 
             using (var command = new MySqlCommand(query, connection))
@@ -329,7 +346,7 @@ public class MySqlDbService : IDatabaseService
 
                 using (var reader = await command.ExecuteReaderAsync())
                 {
-                    while (reader.Read())
+                    while (await reader.ReadAsync())
                     {
                         results.Add(_mapper.MapObject<T>(reader));
                     }
