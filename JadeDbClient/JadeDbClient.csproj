@@ -5,7 +5,7 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <PackageId>JadeDbClient</PackageId>
-    <Version>1.7.00</Version> 
+    <Version>1.7.01</Version> 
     <Authors>KausCoder</Authors>
     <Description>Simplified ADO.NET-style access for SQL Server, MySQL, PostgreSQL. Unified API, parameterized queries, fluent builder, dialect-aware paging and identity handling, multiple connection support.</Description>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
@@ -21,7 +21,7 @@
     <PackageReference Include="Microsoft.Data.SqlClient" Version="7.1.2" />
     <PackageReference Include="Microsoft.Extensions.Configuration" Version="11.0.0" />
     <PackageReference Include="MySqlConnector" Version="3.0.0" />
-    <PackageReference Include="Newtonsoft.Json" Version="14.0.1-beta2" />
+    <PackageReference Include="Newtonsoft.Json" Version="13.0.4" />
     <PackageReference Include="Npgsql" Version="11.0.0" />
   </ItemGroup>
 
